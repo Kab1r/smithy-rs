@@ -1,4 +1,15 @@
 <!-- Do not manually edit this file. Use the `changelogger` tool. -->
+April 30th, 2026
+================
+**New this release:**
+- :bug: (client, [smithy-rs#4614](https://github.com/smithy-lang/smithy-rs/issues/4614), @lnj) Fix `ProfileFileCredentialsProvider` so that profile-level `use_fips_endpoint` and `use_dualstack_endpoint` settings are propagated to the internal STS client used during assume-role credential chaining. Previously these settings were only applied when the provider was built through `aws_config::ConfigLoader::load`, so users constructing `ProfileFileCredentialsProvider` directly via its builder would see STS requests go to non-FIPS / non-dual-stack endpoints even when the selected profile enabled them.
+- (client, @lnj) Optimized BDD endpoint resolution performance by replacing HashMap-based auth schemes with a typed `EndpointAuthScheme` struct, inlining the BDD evaluation loop, and adding a single-entry endpoint cache. The BDD resolver is now up to 49% faster than the original implementation and outperforms the tree-based resolver on most benchmarks.
+
+**Contributors**
+Thank you for your contributions! ❤
+- @lnj ([smithy-rs#4614](https://github.com/smithy-lang/smithy-rs/issues/4614))
+
+
 April 16th, 2026
 ================
 **Breaking Changes:**
