@@ -5,6 +5,7 @@
 
 package software.amazon.smithy.rust.codegen.client.smithy.generators.protocol
 
+import software.amazon.smithy.aws.traits.protocols.AwsQueryCompatibleTrait
 import software.amazon.smithy.model.shapes.BlobShape
 import software.amazon.smithy.model.shapes.OperationShape
 import software.amazon.smithy.model.shapes.StructureShape
@@ -25,6 +26,7 @@ import software.amazon.smithy.rust.codegen.core.smithy.generators.setterName
 import software.amazon.smithy.rust.codegen.core.smithy.isOptional
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.Protocol
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.ProtocolFunctions
+import software.amazon.smithy.rust.codegen.core.util.hasTrait
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.parse.EventStreamUnmarshallerGenerator
 import software.amazon.smithy.rust.codegen.core.smithy.transformers.operationErrors
 import software.amazon.smithy.rust.codegen.core.util.dq
@@ -475,6 +477,15 @@ class ResponseDeserializerGenerator(
                 "BoxError" to RuntimeType.boxError(runtimeConfig),
                 "error_symbol" to errorSymbol,
             )
+            if (codegenContext.serviceShape.hasTrait<AwsQueryCompatibleTrait>()) {
+                rustTemplate(
+                    """
+                    let error_code = headers.get("x-amzn-query-error")
+                        .and_then(|v| v.split(';').next())
+                        .unwrap_or(error_code);
+                    """,
+                )
+            }
             rustTemplate("let err = match error_code {")
             for (error in errors) {
                 val errorShape = model.expectShape(error.id, StructureShape::class.java)

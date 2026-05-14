@@ -234,6 +234,10 @@ class SerdeBenchmarkTestGenerator(
                             smithyJson.resolve("protocol::aws_json_rpc::AwsJsonRpcProtocol") to "aws_json_1_0(${serviceShapeName.dq()})"
                         protocol == software.amazon.smithy.aws.traits.protocols.AwsJson1_1Trait.ID ->
                             smithyJson.resolve("protocol::aws_json_rpc::AwsJsonRpcProtocol") to "aws_json_1_1(${serviceShapeName.dq()})"
+                        protocol == software.amazon.smithy.aws.traits.protocols.AwsQueryTrait.ID -> {
+                            val smithyQuery = CargoDependency.smithyQuery(codegenContext.runtimeConfig).toType()
+                            smithyQuery.resolve("protocol::AwsQueryProtocol") to "new(${codegenContext.serviceShape.version.dq()})"
+                        }
                         else -> return@writable
                     }
 

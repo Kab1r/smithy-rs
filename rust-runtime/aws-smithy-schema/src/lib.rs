@@ -251,6 +251,10 @@ impl Schema {
         self.xml_name.as_ref()
     }
 
+    pub fn xml_flattened(&self) -> Option<&trait_types::XmlFlattenedTrait> {
+        self.xml_flattened.as_ref()
+    }
+
     /// Returns the `@httpHeader` value if present.
     /// Returns `true` if this member schema has any HTTP response binding trait
     /// (`@httpHeader`, `@httpResponseCode`, `@httpPrefixHeaders`, or `@httpPayload`).

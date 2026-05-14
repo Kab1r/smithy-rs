@@ -7,6 +7,8 @@ package software.amazon.smithy.rust.codegen.client.smithy.customizations
 
 import software.amazon.smithy.aws.traits.protocols.AwsJson1_0Trait
 import software.amazon.smithy.aws.traits.protocols.AwsJson1_1Trait
+import software.amazon.smithy.aws.traits.protocols.AwsQueryCompatibleTrait
+import software.amazon.smithy.aws.traits.protocols.AwsQueryTrait
 import software.amazon.smithy.aws.traits.protocols.RestJson1Trait
 import software.amazon.smithy.model.shapes.ShapeId
 import software.amazon.smithy.rust.codegen.client.smithy.ClientCodegenContext
@@ -24,6 +26,7 @@ import software.amazon.smithy.rust.codegen.core.smithy.RuntimeType.Companion.pre
 import software.amazon.smithy.rust.codegen.core.smithy.generators.SchemaStructureCustomization
 import software.amazon.smithy.rust.codegen.core.smithy.generators.StructureCustomization
 import software.amazon.smithy.rust.codegen.core.util.dq
+import software.amazon.smithy.rust.codegen.core.util.hasTrait
 
 /**
  * Determines whether schema-based serialization/deserialization should be used
@@ -119,10 +122,16 @@ private class SchemaProtocolCustomization(
                         when {
                             protocol == RestJson1Trait.ID ->
                                 smithyJson.resolve("protocol::aws_rest_json_1::AwsRestJsonProtocol") to "new()"
+                            protocol == AwsJson1_0Trait.ID && codegenContext.serviceShape.hasTrait<AwsQueryCompatibleTrait>() ->
+                                smithyJson.resolve("protocol::aws_query_compatible::AwsQueryCompatibleProtocol") to "new(${serviceShapeName.dq()})"
                             protocol == AwsJson1_0Trait.ID ->
                                 smithyJson.resolve("protocol::aws_json_rpc::AwsJsonRpcProtocol") to "aws_json_1_0(${serviceShapeName.dq()})"
                             protocol == AwsJson1_1Trait.ID ->
                                 smithyJson.resolve("protocol::aws_json_rpc::AwsJsonRpcProtocol") to "aws_json_1_1(${serviceShapeName.dq()})"
+                            protocol == AwsQueryTrait.ID -> {
+                                val smithyQuery = CargoDependency.smithyQuery(codegenContext.runtimeConfig).toType()
+                                smithyQuery.resolve("protocol::AwsQueryProtocol") to "new(${codegenContext.serviceShape.version.dq()})"
+                            }
                             else -> return@writable // Other protocols not yet implemented
                         }
 

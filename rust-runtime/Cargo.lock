@@ -804,7 +804,10 @@ dependencies = [
 name = "aws-smithy-query"
 version = "0.60.15"
 dependencies = [
+ "aws-smithy-runtime-api 1.12.1",
+ "aws-smithy-schema",
  "aws-smithy-types 1.4.8",
+ "aws-smithy-xml 0.60.15",
  "urlencoding",
 ]
 
@@ -987,6 +990,8 @@ name = "aws-smithy-xml"
 version = "0.60.15"
 dependencies = [
  "aws-smithy-protocol-test",
+ "aws-smithy-schema",
+ "aws-smithy-types 1.4.8",
  "base64 0.13.1",
  "proptest",
  "xmlparser",
