@@ -573,7 +573,7 @@ dependencies = [
  "aws-smithy-json 0.62.6",
  "aws-smithy-runtime-api 1.12.1",
  "aws-smithy-types 1.4.8",
- "aws-smithy-xml 0.60.15",
+ "aws-smithy-xml 0.60.16",
  "bytes",
  "futures-util",
  "http 1.4.0",
@@ -640,7 +640,7 @@ dependencies = [
  "aws-smithy-json 0.62.6",
  "aws-smithy-legacy-http-server",
  "aws-smithy-types 1.4.8",
- "aws-smithy-xml 0.60.15",
+ "aws-smithy-xml 0.60.16",
  "bytes",
  "futures",
  "futures-util",
@@ -725,7 +725,7 @@ dependencies = [
  "aws-smithy-legacy-http",
  "aws-smithy-runtime-api 1.12.1",
  "aws-smithy-types 1.4.8",
- "aws-smithy-xml 0.60.15",
+ "aws-smithy-xml 0.60.16",
  "bytes",
  "futures-util",
  "http 0.2.12",
@@ -802,12 +802,12 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-query"
-version = "0.60.15"
+version = "0.60.16"
 dependencies = [
  "aws-smithy-runtime-api 1.12.1",
  "aws-smithy-schema",
  "aws-smithy-types 1.4.8",
- "aws-smithy-xml 0.60.15",
+ "aws-smithy-xml 0.60.16",
  "urlencoding",
 ]
 
@@ -987,7 +987,7 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-xml"
-version = "0.60.15"
+version = "0.60.16"
 dependencies = [
  "aws-smithy-protocol-test",
  "aws-smithy-schema",
@@ -2506,7 +2506,7 @@ dependencies = [
  "aws-smithy-runtime",
  "aws-smithy-runtime-api 1.12.1",
  "aws-smithy-types 1.4.8",
- "aws-smithy-xml 0.60.15",
+ "aws-smithy-xml 0.60.16",
  "bytes",
  "fastrand 2.4.1",
  "futures-util",
