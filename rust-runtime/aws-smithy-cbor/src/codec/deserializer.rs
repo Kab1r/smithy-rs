@@ -222,6 +222,134 @@ impl ShapeDeserializer for CborDeserializer<'_> {
             _ => None,
         }
     }
+
+    fn read_string_list(&mut self, _schema: &Schema) -> Result<Vec<String>, SerdeError> {
+        self.check_depth()?;
+        let len = self.decoder.list().map_err(deser_err)?;
+        let is_indefinite = len.is_none();
+        let count = len.unwrap_or(0) as usize;
+        let mut out = Vec::with_capacity(capped_container_size(count));
+        let mut i = 0;
+        loop {
+            if !is_indefinite && i >= count {
+                break;
+            }
+            if is_indefinite && self.is_break() {
+                self.consume_break()?;
+                break;
+            }
+            out.push(
+                self.decoder
+                    .str()
+                    .map(|c| c.into_owned())
+                    .map_err(deser_err)?,
+            );
+            i += 1;
+        }
+        self.depth -= 1;
+        Ok(out)
+    }
+
+    fn read_blob_list(&mut self, _schema: &Schema) -> Result<Vec<Blob>, SerdeError> {
+        self.check_depth()?;
+        let len = self.decoder.list().map_err(deser_err)?;
+        let is_indefinite = len.is_none();
+        let count = len.unwrap_or(0) as usize;
+        let mut out = Vec::with_capacity(capped_container_size(count));
+        let mut i = 0;
+        loop {
+            if !is_indefinite && i >= count {
+                break;
+            }
+            if is_indefinite && self.is_break() {
+                self.consume_break()?;
+                break;
+            }
+            out.push(self.decoder.blob().map_err(deser_err)?);
+            i += 1;
+        }
+        self.depth -= 1;
+        Ok(out)
+    }
+
+    fn read_integer_list(&mut self, _schema: &Schema) -> Result<Vec<i32>, SerdeError> {
+        self.check_depth()?;
+        let len = self.decoder.list().map_err(deser_err)?;
+        let is_indefinite = len.is_none();
+        let count = len.unwrap_or(0) as usize;
+        let mut out = Vec::with_capacity(capped_container_size(count));
+        let mut i = 0;
+        loop {
+            if !is_indefinite && i >= count {
+                break;
+            }
+            if is_indefinite && self.is_break() {
+                self.consume_break()?;
+                break;
+            }
+            out.push(self.decoder.integer().map_err(deser_err)?);
+            i += 1;
+        }
+        self.depth -= 1;
+        Ok(out)
+    }
+
+    fn read_long_list(&mut self, _schema: &Schema) -> Result<Vec<i64>, SerdeError> {
+        self.check_depth()?;
+        let len = self.decoder.list().map_err(deser_err)?;
+        let is_indefinite = len.is_none();
+        let count = len.unwrap_or(0) as usize;
+        let mut out = Vec::with_capacity(capped_container_size(count));
+        let mut i = 0;
+        loop {
+            if !is_indefinite && i >= count {
+                break;
+            }
+            if is_indefinite && self.is_break() {
+                self.consume_break()?;
+                break;
+            }
+            out.push(self.decoder.long().map_err(deser_err)?);
+            i += 1;
+        }
+        self.depth -= 1;
+        Ok(out)
+    }
+
+    fn read_string_string_map(
+        &mut self,
+        _schema: &Schema,
+    ) -> Result<std::collections::HashMap<String, String>, SerdeError> {
+        self.check_depth()?;
+        let len = self.decoder.map().map_err(deser_err)?;
+        let is_indefinite = len.is_none();
+        let count = len.unwrap_or(0) as usize;
+        let mut out = std::collections::HashMap::with_capacity(capped_container_size(count));
+        let mut i = 0;
+        loop {
+            if !is_indefinite && i >= count {
+                break;
+            }
+            if is_indefinite && self.is_break() {
+                self.consume_break()?;
+                break;
+            }
+            let key = self
+                .decoder
+                .str()
+                .map(|c| c.into_owned())
+                .map_err(deser_err)?;
+            let val = self
+                .decoder
+                .str()
+                .map(|c| c.into_owned())
+                .map_err(deser_err)?;
+            out.insert(key, val);
+            i += 1;
+        }
+        self.depth -= 1;
+        Ok(out)
+    }
 }
 
 fn deser_err(e: crate::decode::DeserializeError) -> SerdeError {
