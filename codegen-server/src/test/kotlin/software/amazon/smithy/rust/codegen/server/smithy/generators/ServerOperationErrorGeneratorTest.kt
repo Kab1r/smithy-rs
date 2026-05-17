@@ -110,12 +110,46 @@ class ServerOperationErrorGeneratorTest {
         }
     }
 
-    // Error structures may declare a member literally named `name`. The framework previously emitted
-    // its own `pub fn name(&self) -> &'static str` inherent accessor on every server-target error,
-    // which clashed with the field accessor (`pub fn name(&self) -> Option<&str>`) the structure
-    // generator emits for the model-declared member — yielding E0592 duplicate definitions on the
-    // generated struct. We use serverIntegrationTest so the full plugin pipeline (including
-    // ErrorImplGenerator) runs and rustc actually compiles the generated code.
+    // Error structures may declare a member whose Rust-side identifier is `name`, including
+    // PascalCase / camelCase variants (`Name`, `NAME`) that the symbol provider snake-cases. The
+    // framework's own `pub fn name(&self) -> &'static str` inherent accessor must not be emitted
+    // when any such field would already provide a `pub fn name(&self) -> Option<&str>` accessor,
+    // otherwise rustc reports E0592 duplicate definitions.
+    @Test
+    fun `errors with a pascal-case name member still compile`() {
+        val model =
+            """
+            namespace error
+
+            use aws.protocols#restJson1
+
+            @restJson1
+            service MyService {
+                version: "1.0.0"
+                operations: [DoThing]
+            }
+
+            @http(method: "POST", uri: "/do-thing")
+            operation DoThing {
+                input: DoThingInput
+                errors: [ResourceConflict]
+            }
+
+            structure DoThingInput {
+                resource: String
+            }
+
+            @error("client")
+            @httpError(409)
+            structure ResourceConflict {
+                Name: String,
+                Message: String,
+            }
+            """.asSmithyModel(smithyVersion = "2")
+
+        serverIntegrationTest(model, testCoverage = HttpTestType.Default)
+    }
+
     @Test
     fun `errors with a model-declared name member still compile`() {
         val model =

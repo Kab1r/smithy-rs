@@ -136,14 +136,16 @@ class ErrorImplGenerator(
             /*
              * If we're generating for a server, a hidden `name` accessor returning the shape's
              * local name is historically emitted to enable recording encountered error types
-             * inside `http::Extensions`. We skip it when the model declares a member literally
-             * named `name`, since the structure generator's field accessor (returning
-             * `Option<&str>`) would collide with this `&'static str` accessor and yield E0592.
-             * The operation-error enum's `name()` accessor (in ServerOperationErrorGenerator)
-             * already emits literal shape names per variant, so the struct-level accessor is no
-             * longer load-bearing internally.
+             * inside `http::Extensions`. We skip it whenever the model declares a member whose
+             * generated Rust identifier is `name`, since the structure generator's field
+             * accessor (`pub fn name(&self) -> Option<&str>`) would collide with this `&'static
+             * str` accessor and yield E0592. The check uses the symbol provider's resolved name
+             * so PascalCase / camelCase members (`Name`, `NAME`) that the Rust-side snake-cases
+             * to `name` are also covered. The operation-error enum's `name()` accessor (in
+             * ServerOperationErrorGenerator) already emits literal shape names per variant, so
+             * the struct-level accessor is no longer load-bearing internally.
              */
-            if (forWhom == CodegenTarget.SERVER && shape.members().none { it.memberName == "name" }) {
+            if (forWhom == CodegenTarget.SERVER && shape.members().none { symbolProvider.toMemberName(it) == "name" }) {
                 rust(
                     """
                     ##[doc(hidden)]
