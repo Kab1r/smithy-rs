@@ -6,6 +6,7 @@
 package software.amazon.smithy.rust.codegen.server.smithy.validators
 
 import software.amazon.smithy.framework.rust.ValidationExceptionTrait
+import software.amazon.smithy.framework.rust.ValidationFieldListTrait
 import software.amazon.smithy.model.Model
 import software.amazon.smithy.model.shapes.Shape
 import software.amazon.smithy.model.shapes.ShapeType
@@ -100,12 +101,19 @@ class CustomValidationExceptionValidator : AbstractValidator() {
             }
 
             ShapeType.MEMBER -> {
+                val member = this.asMemberShape().get()
+                val isCanonicalValidationExceptionMember =
+                    member.isValidationMessage() || member.hasTrait(ValidationFieldListTrait.ID)
                 // We want to check if the member's target is constrained. If so, we want the default trait to be on the
                 // member.
-                if (this.targetOrSelf(model).isDirectlyConstrainedForValidation() && !this.hasTrait<DefaultTrait>()) {
+                if (!isCanonicalValidationExceptionMember &&
+                    this.targetOrSelf(model).isDirectlyConstrainedForValidation() &&
+                    !this.hasTrait<DefaultTrait>()
+                ) {
                     events.add(
                         ValidationEvent.builder().id("CustomValidationException.MissingDefault")
                             .severity(Severity.ERROR)
+                            .shape(this)
                             .message("$this must be default constructible")
                             .build(),
                     )

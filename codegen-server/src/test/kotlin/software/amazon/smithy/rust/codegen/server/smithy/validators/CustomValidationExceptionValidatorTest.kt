@@ -136,6 +136,7 @@ class CustomValidationExceptionValidatorTest {
 
         events shouldHaveSize 1
         events[0].id shouldBe "CustomValidationException.MissingDefault"
+        events[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$constrainedField")
     }
 
     @Test
@@ -174,5 +175,76 @@ class CustomValidationExceptionValidatorTest {
         @default("default")
         string ConstrainedString
         """.asSmithyModel(smithyVersion = "2")
+    }
+
+    @Test
+    fun `should allow validation message member to target constrained string without default`() {
+        """
+        namespace test
+        use smithy.framework.rust#validationException
+
+        @validationException
+        @error("client")
+        structure ValidationError {
+            message: ConstrainedMessage
+        }
+
+        @length(min: 1, max: 1024)
+        string ConstrainedMessage
+        """.asSmithyModel(smithyVersion = "2")
+    }
+
+    @Test
+    fun `should allow validation field list member to target constrained list without default`() {
+        """
+        namespace test
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationFieldList
+
+        @validationException
+        @error("client")
+        structure ValidationError {
+            message: String,
+
+            @validationFieldList
+            fieldList: ConstrainedValidationFieldList
+        }
+
+        @length(min: 1)
+        list ConstrainedValidationFieldList {
+            member: ValidationField
+        }
+
+        structure ValidationField {
+            name: String
+        }
+        """.asSmithyModel(smithyVersion = "2")
+    }
+
+    @Test
+    fun `should still require defaults for non-canonical constrained members`() {
+        val exception =
+            shouldThrow<ValidatedResultException> {
+                """
+                namespace test
+                use smithy.framework.rust#validationException
+
+                @validationException
+                @error("client")
+                structure ValidationError {
+                    message: String,
+                    extraField: ConstrainedString
+                }
+
+                @pattern("^[a-z]+${'$'}")
+                string ConstrainedString
+                """.asSmithyModel(smithyVersion = "2")
+            }
+
+        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+
+        events shouldHaveSize 1
+        events[0].id shouldBe "CustomValidationException.MissingDefault"
+        events[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$extraField")
     }
 }

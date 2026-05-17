@@ -211,9 +211,9 @@ internal class AddValidationExceptionToConstrainedOperationsTest {
         structure ResourceOutput {}
         """.asSmithyModel(
             smithyVersion = "2",
-            // Exclude smithy-validation-model from discovery so the shape is not in the model,
+            // Exclude validation model providers from discovery so the shape is not in the model,
             // simulating the removeUnusedShapes projection transform pruning it.
-            additionalDeniedModels = arrayOf("smithy-validation-model"),
+            additionalDeniedModels = arrayOf("smithy-validation-model", "codegen-traits"),
         )
 
     @Test
