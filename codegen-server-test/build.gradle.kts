@@ -16,6 +16,7 @@ plugins {
 }
 
 val properties = PropertyRetriever(rootProject, project)
+configureSmithyBuildSeverity(rootProject)
 
 val pluginName = "rust-server-codegen"
 val workingDirUnderBuildDir = "smithyprojections/codegen-server-test/"

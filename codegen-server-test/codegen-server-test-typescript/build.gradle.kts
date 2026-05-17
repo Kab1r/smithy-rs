@@ -18,6 +18,7 @@ tasks.jar.configure {
 }
 
 val properties = PropertyRetriever(rootProject, project)
+configureSmithyBuildSeverity(rootProject)
 val buildDir = layout.buildDirectory.get().asFile
 
 val pluginName = "rust-server-codegen-typescript"

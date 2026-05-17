@@ -15,6 +15,7 @@ plugins {
 }
 
 val properties = PropertyRetriever(rootProject, project)
+configureSmithyBuildSeverity(rootProject)
 
 val pluginName = "rust-client-codegen"
 val workingDirUnderBuildDir = "smithyprojections/sdk-adhoc-test/"

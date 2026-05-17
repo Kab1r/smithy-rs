@@ -28,6 +28,7 @@ configure<software.amazon.smithy.gradle.SmithyExtension> {
 }
 
 val properties = PropertyRetriever(rootProject, project)
+configureSmithyBuildSeverity(rootProject)
 
 val crateHasherToolPath = rootProject.projectDir.resolve("tools/ci-build/crate-hasher")
 val publisherToolPath = rootProject.projectDir.resolve("tools/ci-build/publisher")

@@ -17,6 +17,7 @@ tasks.jar.configure {
 }
 
 val properties = PropertyRetriever(rootProject, project)
+configureSmithyBuildSeverity(rootProject)
 fun getSmithyRuntimeMode(): String = properties.get("smithy.runtime.mode") ?: "orchestrator"
 
 val pluginName = "rust-client-codegen"
