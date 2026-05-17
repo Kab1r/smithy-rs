@@ -66,6 +66,7 @@ mod service;
 use std::fmt::{Debug, Display};
 
 pub use plugin::*;
+pub use sensitivity::MakeSensitive;
 pub use service::*;
 
 /// A standard interface for taking some component of the HTTP request/response and transforming it into new struct
