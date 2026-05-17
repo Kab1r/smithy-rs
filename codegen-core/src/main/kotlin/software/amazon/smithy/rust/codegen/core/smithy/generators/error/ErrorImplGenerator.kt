@@ -134,10 +134,16 @@ class ErrorImplGenerator(
             }
 
             /*
-             * If we're generating for a server, the `name` method is added to enable
-             * recording encountered error types inside `http::Extensions`s.
+             * If we're generating for a server, a hidden `name` accessor returning the shape's
+             * local name is historically emitted to enable recording encountered error types
+             * inside `http::Extensions`. We skip it when the model declares a member literally
+             * named `name`, since the structure generator's field accessor (returning
+             * `Option<&str>`) would collide with this `&'static str` accessor and yield E0592.
+             * The operation-error enum's `name()` accessor (in ServerOperationErrorGenerator)
+             * already emits literal shape names per variant, so the struct-level accessor is no
+             * longer load-bearing internally.
              */
-            if (forWhom == CodegenTarget.SERVER) {
+            if (forWhom == CodegenTarget.SERVER && shape.members().none { it.memberName == "name" }) {
                 rust(
                     """
                     ##[doc(hidden)]

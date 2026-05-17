@@ -15,6 +15,8 @@ import software.amazon.smithy.rust.codegen.core.testutil.unitTest
 import software.amazon.smithy.rust.codegen.core.util.lookup
 import software.amazon.smithy.rust.codegen.server.smithy.ServerRustModule
 import software.amazon.smithy.rust.codegen.server.smithy.renderInlineMemoryModules
+import software.amazon.smithy.rust.codegen.server.smithy.testutil.HttpTestType
+import software.amazon.smithy.rust.codegen.server.smithy.testutil.serverIntegrationTest
 import software.amazon.smithy.rust.codegen.server.smithy.testutil.serverRenderWithModelBuilder
 import software.amazon.smithy.rust.codegen.server.smithy.testutil.serverTestSymbolProvider
 
@@ -106,5 +108,46 @@ class ServerOperationErrorGeneratorTest {
             project.renderInlineMemoryModules()
             project.compileAndTest()
         }
+    }
+
+    // Error structures may declare a member literally named `name`. The framework previously emitted
+    // its own `pub fn name(&self) -> &'static str` inherent accessor on every server-target error,
+    // which clashed with the field accessor (`pub fn name(&self) -> Option<&str>`) the structure
+    // generator emits for the model-declared member — yielding E0592 duplicate definitions on the
+    // generated struct. We use serverIntegrationTest so the full plugin pipeline (including
+    // ErrorImplGenerator) runs and rustc actually compiles the generated code.
+    @Test
+    fun `errors with a model-declared name member still compile`() {
+        val model =
+            """
+            namespace error
+
+            use aws.protocols#restJson1
+
+            @restJson1
+            service MyService {
+                version: "1.0.0"
+                operations: [DoThing]
+            }
+
+            @http(method: "POST", uri: "/do-thing")
+            operation DoThing {
+                input: DoThingInput
+                errors: [AlreadyExistsException]
+            }
+
+            structure DoThingInput {
+                resource: String
+            }
+
+            @error("client")
+            @httpError(409)
+            structure AlreadyExistsException {
+                name: String,
+                message: String,
+            }
+            """.asSmithyModel(smithyVersion = "2")
+
+        serverIntegrationTest(model, testCoverage = HttpTestType.Default)
     }
 }

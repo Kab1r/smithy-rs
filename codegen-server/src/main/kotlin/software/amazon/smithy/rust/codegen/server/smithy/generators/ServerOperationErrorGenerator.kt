@@ -20,6 +20,7 @@ import software.amazon.smithy.rust.codegen.core.rustlang.documentShape
 import software.amazon.smithy.rust.codegen.core.rustlang.rust
 import software.amazon.smithy.rust.codegen.core.rustlang.rustBlock
 import software.amazon.smithy.rust.codegen.core.smithy.RuntimeType
+import software.amazon.smithy.rust.codegen.core.util.dq
 import software.amazon.smithy.rust.codegen.core.smithy.RustSymbolProvider
 import software.amazon.smithy.rust.codegen.core.smithy.transformers.eventStreamErrors
 import software.amazon.smithy.rust.codegen.core.smithy.transformers.operationErrors
@@ -91,8 +92,15 @@ open class ServerOperationErrorGenerator(
             }
             writer.rust("/// Returns the error name string by matching the correct variant.")
             writer.rustBlock("pub fn name(&self) -> &'static str") {
-                delegateToVariants(errors, errorSymbol) {
-                    rust("_inner.name()")
+                // Emit a literal shape name per variant rather than delegating to `_inner.name()`.
+                // The inner-struct accessor cannot be relied on when the error shape declares a
+                // member literally named `name` — its field accessor (returning `Option<&str>`)
+                // would collide with the framework's `pub fn name(&self) -> &'static str` accessor.
+                writer.rustBlock("match &self") {
+                    errors.forEach { error ->
+                        val errorVariantSymbol = symbolProvider.toSymbol(error)
+                        writer.rust("""${errorSymbol.name}::${errorVariantSymbol.name}(_) => ${error.id.name.dq()},""")
+                    }
                 }
             }
         }
