@@ -442,4 +442,149 @@ internal class UserProvidedValidationExceptionDecoratorTest {
     fun `code compiles with implicit message and field name and without field message`() {
         serverIntegrationTest(completeTestModelWithImplicitNamesWithoutFieldMessage)
     }
+
+    private val modelWithConstrainedMessage =
+        """
+        namespace com.aws.example
+
+        use aws.protocols#restJson1
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationMessage
+
+        @restJson1
+        service CustomValidationExample {
+            version: "1.0.0"
+            operations: [
+                TestOperation
+            ]
+            errors: [
+                MyCustomValidationException
+            ]
+        }
+
+        @http(method: "POST", uri: "/test")
+        operation TestOperation {
+            input: TestInput
+        }
+
+        structure TestInput {
+            @required
+            @length(min: 1, max: 10)
+            name: String
+        }
+
+        @error("client")
+        @httpError(400)
+        @validationException
+        structure MyCustomValidationException {
+            @validationMessage
+            message: ErrorMessage
+        }
+
+        @length(min: 0, max: 2048)
+        string ErrorMessage
+        """.asSmithyModel(smithyVersion = "2.0")
+
+    @Test
+    fun `code compiles with constrained optional validation message`() {
+        serverIntegrationTest(modelWithConstrainedMessage, testCoverage = HttpTestType.Default)
+    }
+
+    private val modelWithRequiredConstrainedMessage =
+        """
+        namespace com.aws.example
+
+        use aws.protocols#restJson1
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationMessage
+
+        @restJson1
+        service CustomValidationExample {
+            version: "1.0.0"
+            operations: [
+                TestOperation
+            ]
+            errors: [
+                MyCustomValidationException
+            ]
+        }
+
+        @http(method: "POST", uri: "/test")
+        operation TestOperation {
+            input: TestInput
+        }
+
+        structure TestInput {
+            @required
+            @length(min: 1, max: 10)
+            name: String
+        }
+
+        @error("client")
+        @httpError(400)
+        @validationException
+        structure MyCustomValidationException {
+            @required
+            @validationMessage
+            message: ErrorMessage
+        }
+
+        @length(min: 0, max: 2048)
+        string ErrorMessage
+        """.asSmithyModel(smithyVersion = "2.0")
+
+    @Test
+    fun `code compiles with required constrained validation message`() {
+        serverIntegrationTest(modelWithRequiredConstrainedMessage, testCoverage = HttpTestType.Default)
+    }
+
+    private val modelWithConstrainedAdditionalFieldDefault =
+        """
+        namespace com.aws.example
+
+        use aws.protocols#restJson1
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationMessage
+
+        @restJson1
+        service CustomValidationExample {
+            version: "1.0.0"
+            operations: [
+                TestOperation
+            ]
+            errors: [
+                MyCustomValidationException
+            ]
+        }
+
+        @http(method: "POST", uri: "/test")
+        operation TestOperation {
+            input: TestInput
+        }
+
+        structure TestInput {
+            @required
+            @length(min: 1, max: 10)
+            name: String
+        }
+
+        @error("client")
+        @httpError(400)
+        @validationException
+        structure MyCustomValidationException {
+            @validationMessage
+            message: String
+
+            @default("ok")
+            tag: ConstrainedTag
+        }
+
+        @length(min: 0, max: 16)
+        string ConstrainedTag
+        """.asSmithyModel(smithyVersion = "2.0")
+
+    @Test
+    fun `code compiles with constrained additional field default`() {
+        serverIntegrationTest(modelWithConstrainedAdditionalFieldDefault, testCoverage = HttpTestType.Default)
+    }
 }

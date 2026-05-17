@@ -52,6 +52,7 @@ import software.amazon.smithy.rust.codegen.server.smithy.generators.ValidationEx
 import software.amazon.smithy.rust.codegen.server.smithy.generators.isKeyConstrained
 import software.amazon.smithy.rust.codegen.server.smithy.generators.isValueConstrained
 import software.amazon.smithy.rust.codegen.server.smithy.generators.protocol.ServerProtocol
+import software.amazon.smithy.rust.codegen.server.smithy.hasPublicConstrainedWrapperTupleType
 import software.amazon.smithy.rust.codegen.server.smithy.util.isValidationFieldName
 import software.amazon.smithy.rust.codegen.server.smithy.util.isValidationMessage
 import software.amazon.smithy.rust.codegen.server.smithy.validationErrorMessage
@@ -231,10 +232,12 @@ class UserProvidedValidationExceptionConversionGenerator(
                 codegenContext.symbolProvider.shapeModuleName(codegenContext.serviceShape, validationExceptionStructure)
             val shapeFunctionName = validationExceptionStructure.id.name.toSnakeCase()
 
+            val constraintViolationParamName =
+                if (maybeValidationFieldList != null) "constraint_violation" else "_constraint_violation"
             rustTemplate(
                 """
                 impl #{From}<ConstraintViolation> for #{RequestRejection} {
-                    fn from(constraint_violation: ConstraintViolation) -> Self {
+                    fn from($constraintViolationParamName: ConstraintViolation) -> Self {
                         #{FieldCreation}
                         let validation_exception = #{ValidationException} {
                             $validationMessageName: #{ValidationMessage},
@@ -269,7 +272,8 @@ class UserProvidedValidationExceptionConversionGenerator(
                                     """format!("validation error detected. {}", &first_validation_exception_field.$validationFieldMessageName)"""
                                 }
                             } ?: """format!("validation error detected")"""
-                        rust(validationMessageMember.wrapValueIfOptional(message))
+                        val wrappedMessage = validationMessageMember.wrapValueInTargetTypeIfConstrained(message)
+                        rust(validationMessageMember.wrapValueIfOptional(wrappedMessage))
                     },
                 "FieldListAssignment" to
                     writable {
@@ -681,7 +685,10 @@ class UserProvidedValidationExceptionConversionGenerator(
                     "$enumSymbol::$variantName"
                 }
 
-                node.isStringNode -> """"${node.expectStringNode().value}".to_string()"""
+                node.isStringNode ->
+                    member.wrapValueInTargetTypeIfConstrained(
+                        """"${node.expectStringNode().value}".to_string()""",
+                    )
                 node.isBooleanNode -> node.expectBooleanNode().value.toString()
                 node.isNumberNode -> node.expectNumberNode().value.toString()
                 else -> "Default::default()"
@@ -695,6 +702,24 @@ class UserProvidedValidationExceptionConversionGenerator(
         } else {
             valueExpression
         }
+
+    /**
+     * If this member's target shape is a constrained wrapper newtype (e.g. a string with `@length` / `@pattern`),
+     * wrap the value expression in `<TargetType>::try_from(...).expect(...)`. Otherwise return the expression
+     * unchanged. The `expect` is safe in practice because the framework-supplied values (the canonical
+     * "validation error detected" message and `@default`-derived values) are validated against the model's
+     * constraints at codegen time.
+     */
+    private fun MemberShape.wrapValueInTargetTypeIfConstrained(valueExpression: String): String {
+        val target = this.targetShape(codegenContext.model)
+        val publicConstrainedTypes = codegenContext.settings.codegenConfig.publicConstrainedTypes
+        return if (target.hasPublicConstrainedWrapperTupleType(codegenContext.model, publicConstrainedTypes)) {
+            val targetSymbol = codegenContext.symbolProvider.toSymbol(target)
+            """<$targetSymbol as ::std::convert::TryFrom<_>>::try_from($valueExpression).expect("framework-generated value satisfies the model constraint")"""
+        } else {
+            valueExpression
+        }
+    }
 }
 
 /**
