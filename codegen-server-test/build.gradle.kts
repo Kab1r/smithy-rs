@@ -26,7 +26,6 @@ dependencies {
     implementation(libs.smithy.protocol.tests)
     implementation(libs.smithy.protocol.test.traits)
     implementation(libs.smithy.aws.traits)
-    implementation(libs.smithy.validation.model)
 }
 
 smithy {
