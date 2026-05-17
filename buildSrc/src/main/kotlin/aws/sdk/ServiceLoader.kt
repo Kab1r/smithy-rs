@@ -9,8 +9,12 @@ import CrateSet
 import org.gradle.api.Project
 import software.amazon.smithy.aws.traits.ServiceTrait
 import software.amazon.smithy.model.Model
+import software.amazon.smithy.model.SourceLocation
 import software.amazon.smithy.model.shapes.ServiceShape
 import software.amazon.smithy.model.traits.TitleTrait
+import software.amazon.smithy.model.validation.Severity
+import software.amazon.smithy.model.validation.ValidatedResultException
+import software.amazon.smithy.model.validation.ValidationEvent
 import java.io.File
 import kotlin.streams.toList
 
@@ -83,6 +87,31 @@ class AwsServices(
     fun excludedFromWorkspace() = rootTests.map(RootTest::manifestName)
 }
 
+private const val regexStackOverflowEventId = "PatternTrait.RegexStackOverflow"
+
+internal fun regexStackOverflowEvent(file: File): ValidationEvent =
+    ValidationEvent.builder()
+        .id(regexStackOverflowEventId)
+        .severity(Severity.ERROR)
+        .sourceLocation(SourceLocation(file.absolutePath, 1, 1))
+        .message(
+            "Java regex compilation overflowed the stack while loading this model. " +
+                "Check the model's @pattern traits for expressions that exceed java.util.regex.Pattern's recursion limits.",
+        )
+        .build()
+
+internal fun assembleServiceDiscoveryModel(
+    file: File,
+    assembler: (File) -> Model = { modelFile ->
+        Model.assembler().addImport(modelFile.absolutePath).assemble().unwrap()
+    },
+): Model =
+    try {
+        assembler(file)
+    } catch (e: StackOverflowError) {
+        throw ValidatedResultException(listOf(regexStackOverflowEvent(file)))
+    }
+
 /**
  * Discovers services from the `aws-models` directory within the project.
  *
@@ -101,7 +130,7 @@ fun Project.discoverServices(
     val baseServices =
         files
             .mapNotNull { file ->
-                val model = Model.assembler().addImport(file.absolutePath).assemble().result.get()
+                val model = assembleServiceDiscoveryModel(file)
                 val services: List<ServiceShape> = model.shapes(ServiceShape::class.java).sorted().toList()
                 if (services.size > 1) {
                     throw Exception("There must be exactly one service in each aws model file")
