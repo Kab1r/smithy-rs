@@ -296,6 +296,12 @@ internal class ValidateUnsupportedConstraintsAreNotUsedTest {
             )
 
         validationResult.shouldAbort shouldBe true
+        validationResult.messages[0].message shouldContain (
+            """
+            The `ignoreUnsupportedConstraints` setting does not downgrade this validation because the Smithy specification has not defined
+            semantics for this constraint combination.
+            """.trimIndent().replace("\n", " ")
+        )
     }
 
     @Test
@@ -307,6 +313,14 @@ internal class ValidateUnsupportedConstraintsAreNotUsedTest {
             )
 
         validationResult.shouldAbort shouldBe true
+        validationResult.messages.shouldForAll {
+            it.message shouldContain (
+                """
+                The `ignoreUnsupportedConstraints` setting does not downgrade this validation because the Smithy specification has not defined
+                semantics for this constraint combination.
+                """.trimIndent().replace("\n", " ")
+            )
+        }
     }
 
     @Test

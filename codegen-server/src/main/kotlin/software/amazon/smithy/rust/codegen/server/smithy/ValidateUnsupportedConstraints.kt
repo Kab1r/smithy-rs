@@ -61,6 +61,10 @@ private sealed class UnsupportedConstraintMessageKind {
                 msg += """
                     If you want to go ahead and generate the server SDK ignoring unsupported constraint traits, set the key `ignoreUnsupportedConstraints`
                     inside the `runtimeConfig.codegen` JSON object in your `smithy-build.json` to `true`."""
+            } else if (ignoreUnsupportedConstraints) {
+                msg +=
+                    " The `ignoreUnsupportedConstraints` setting does not downgrade this validation because the Smithy " +
+                        "specification has not defined semantics for this constraint combination."
             }
             return msg.trimIndent().replace("\n", " ")
         }
