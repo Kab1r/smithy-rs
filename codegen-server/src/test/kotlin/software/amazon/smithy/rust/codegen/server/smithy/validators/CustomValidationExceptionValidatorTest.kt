@@ -222,6 +222,39 @@ class CustomValidationExceptionValidatorTest {
     }
 
     @Test
+    fun `should accept PascalCase Message as the canonical validation message member`() {
+        // awsQuery / restXml AWS service models commonly declare the validation-exception message
+        // member as PascalCase Message to match the wire format. Recognizing the lowercase variant
+        // alone aborted these services at smithy-build with MissingMessageField; the matcher must
+        // accept any case-folded "message" alongside the explicit @validationMessage annotation.
+        """
+        namespace test
+        use smithy.framework.rust#validationException
+
+        @validationException
+        @error("client")
+        structure ValidationException {
+            Code: String,
+            Message: String,
+        }
+        """.asSmithyModel(smithyVersion = "2")
+    }
+
+    @Test
+    fun `should accept uppercase MESSAGE as the canonical validation message member`() {
+        """
+        namespace test
+        use smithy.framework.rust#validationException
+
+        @validationException
+        @error("client")
+        structure ValidationException {
+            MESSAGE: String,
+        }
+        """.asSmithyModel(smithyVersion = "2")
+    }
+
+    @Test
     fun `should still require defaults for non-canonical constrained members`() {
         val exception =
             shouldThrow<ValidatedResultException> {
