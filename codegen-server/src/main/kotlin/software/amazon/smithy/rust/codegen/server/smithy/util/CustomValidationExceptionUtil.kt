@@ -21,6 +21,16 @@ fun MemberShape.isValidationMessage(): Boolean {
     return this.hasTrait(ValidationMessageTrait.ID) || this.memberName.equals("message", ignoreCase = true)
 }
 
+/**
+ * Helper function to determine if this [MemberShape] is a validation field-name member either explicitly with the
+ * @validationFieldName trait or implicitly because it is named "name" or "path".
+ *
+ * Both names are recognised: AWS service models conventionally call it `name`, while
+ * `smithy.framework#ValidationExceptionField` calls it `path`. The match is case-insensitive so that PascalCase
+ * variants (`Name`, `Path`) are also accepted.
+ */
 fun MemberShape.isValidationFieldName(): Boolean {
-    return this.hasTrait(ValidationFieldNameTrait.ID) || this.memberName.equals("name", ignoreCase = true)
+    return this.hasTrait(ValidationFieldNameTrait.ID) ||
+        this.memberName.equals("name", ignoreCase = true) ||
+        this.memberName.equals("path", ignoreCase = true)
 }

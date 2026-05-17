@@ -747,4 +747,55 @@ internal class UserProvidedValidationExceptionDecoratorTest {
         val occurrences = Regex("""pub struct ValidationException\b""").findAll(errorRs).count()
         occurrences shouldBe 1
     }
+
+    private val modelWithFieldNamedPath =
+        """
+        namespace com.aws.example
+
+        use aws.protocols#restJson1
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationFieldList
+
+        @restJson1
+        service CustomValidationExample {
+            version: "1.0.0"
+            operations: [TestOperation]
+            errors: [MyValidationException]
+        }
+
+        @http(method: "POST", uri: "/test")
+        operation TestOperation {
+            input: TestInput
+        }
+
+        structure TestInput {
+            @required
+            @length(min: 1, max: 10)
+            name: String
+        }
+
+        @error("client")
+        @httpError(400)
+        @validationException
+        structure MyValidationException {
+            message: String
+
+            @validationFieldList
+            fieldList: MyValidationFieldList
+        }
+
+        structure MyValidationField {
+            path: String
+            message: String
+        }
+
+        list MyValidationFieldList {
+            member: MyValidationField
+        }
+        """.asSmithyModel(smithyVersion = "2.0")
+
+    @Test
+    fun `code compiles with implicit path member name`() {
+        serverIntegrationTest(modelWithFieldNamedPath, testCoverage = HttpTestType.Default)
+    }
 }
