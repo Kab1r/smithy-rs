@@ -6,6 +6,7 @@
 package software.amazon.smithy.rust.codegen.server.smithy
 
 import software.amazon.smithy.build.PluginContext
+import software.amazon.smithy.codegen.core.CodegenException
 import software.amazon.smithy.codegen.core.ReservedWordSymbolProvider
 import software.amazon.smithy.model.Model
 import software.amazon.smithy.model.shapes.ServiceShape
@@ -35,6 +36,31 @@ import java.util.logging.Logger
  * `resources/META-INF.services/software.amazon.smithy.build.SmithyBuildPlugin` refers to this class by name which
  * enables the smithy-build plugin to invoke `execute` with all Smithy plugin context + models.
  */
+/**
+ * Run [block], converting any [StackOverflowError] into a [CodegenException].
+ *
+ * Pathological `@pattern` expressions can blow `java.util.regex.Pattern.compile`'s recursion limit
+ * while smithy-build constructs the projection's model. The resulting [StackOverflowError] is an
+ * [Error], which smithy-build does not catch — it surfaces as a raw JVM trace and aborts the build.
+ * Re-throwing it as a [CodegenException] (a [RuntimeException]) lets smithy-build report the
+ * failure in its normal `Projection X failed: ...` form so `--continue` / `--keep-going` can carry
+ * the rest of the batch.
+ */
+internal inline fun <T> guardAgainstRegexStackOverflow(
+    projectionName: String,
+    block: () -> T,
+): T =
+    try {
+        block()
+    } catch (e: StackOverflowError) {
+        throw CodegenException(
+            "Java regex compilation overflowed the stack during projection `$projectionName`. " +
+                "Check the projection's @pattern traits for expressions that exceed " +
+                "java.util.regex.Pattern's recursion limits.",
+            e,
+        )
+    }
+
 class RustServerCodegenPlugin : ServerDecoratableBuildPlugin() {
     private val logger = Logger.getLogger(javaClass.name)
 
@@ -47,19 +73,21 @@ class RustServerCodegenPlugin : ServerDecoratableBuildPlugin() {
         context: PluginContext,
         vararg decorator: ServerCodegenDecorator,
     ) {
-        Logger.getLogger(ReservedWordSymbolProvider::class.java.name).level = Level.OFF
-        val codegenDecorator =
-            CombinedServerCodegenDecorator.fromClasspath(
-                context,
-                ServerRequiredCustomizations(),
-                UserProvidedValidationExceptionDecorator(),
-                SmithyValidationExceptionDecorator(),
-                CustomValidationExceptionWithReasonDecorator(),
-                SigV4EventStreamDecorator(),
-                *decorator,
-            )
-        logger.info("Loaded plugin to generate pure Rust bindings for the server SDK")
-        ServerCodegenVisitor(context, codegenDecorator).execute()
+        guardAgainstRegexStackOverflow(context.projectionName) {
+            Logger.getLogger(ReservedWordSymbolProvider::class.java.name).level = Level.OFF
+            val codegenDecorator =
+                CombinedServerCodegenDecorator.fromClasspath(
+                    context,
+                    ServerRequiredCustomizations(),
+                    UserProvidedValidationExceptionDecorator(),
+                    SmithyValidationExceptionDecorator(),
+                    CustomValidationExceptionWithReasonDecorator(),
+                    SigV4EventStreamDecorator(),
+                    *decorator,
+                )
+            logger.info("Loaded plugin to generate pure Rust bindings for the server SDK")
+            ServerCodegenVisitor(context, codegenDecorator).execute()
+        }
     }
 
     companion object {
