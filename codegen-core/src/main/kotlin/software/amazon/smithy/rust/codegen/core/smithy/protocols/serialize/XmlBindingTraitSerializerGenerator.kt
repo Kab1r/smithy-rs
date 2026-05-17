@@ -301,6 +301,28 @@ class XmlBindingTraitSerializerGenerator(
         return ".write_ns(${uri.dq()}, $prefix)"
     }
 
+    fun rootNamespace(shape: Shape): String = shape.xmlNamespace(root = true).apply()
+
+    fun serviceRootNamespace(): String = rootNamespace.apply()
+
+    fun renderStructureMembers(
+        writer: RustWriter,
+        members: XmlMemberIndex,
+        scopeWriter: String,
+        input: String,
+    ) {
+        writer.apply {
+            val scopeCtx = Ctx.Scope(scopeWriter, input)
+            members.dataMembers.forEach { member ->
+                serializeMember(
+                    member,
+                    scopeCtx.copy(input = "&$input.${symbolProvider.toMemberName(member)}"),
+                    null,
+                )
+            }
+        }
+    }
+
     private fun RustWriter.structureInner(
         members: XmlMemberIndex,
         ctx: Ctx.Element,
@@ -410,7 +432,12 @@ class XmlBindingTraitSerializerGenerator(
                     }
                 is MapShape ->
                     if (memberShape.hasTrait<XmlFlattenedTrait>()) {
-                        serializeMap(target, xmlIndex.memberName(memberShape), ctx)
+                        serializeMap(
+                            target,
+                            xmlIndex.memberName(memberShape),
+                            ctx,
+                            entryNamespace = memberShape.xmlNamespace(root = false).apply(),
+                        )
                     } else {
                         rust(
                             "let mut inner_writer = ${ctx.scopeWriter}.start_el(${xmlName.dq()})$ns.finish();",
@@ -541,7 +568,7 @@ class XmlBindingTraitSerializerGenerator(
         ctx: Ctx.Scope,
     ) {
         val itemName = safeName("list_item")
-        rustBlock("for $itemName in ${ctx.input}") {
+        rustBlock("for $itemName in ${listIterable(listShape, ctx.input)}") {
             serializeMember(listShape.member, ctx.copy(input = itemName))
         }
     }
@@ -552,7 +579,7 @@ class XmlBindingTraitSerializerGenerator(
         ctx: Ctx.Scope,
     ) {
         val itemName = safeName("list_item")
-        rustBlock("for $itemName in ${ctx.input}") {
+        rustBlock("for $itemName in ${listIterable(listShape, ctx.input)}") {
             serializeMember(
                 listShape.member,
                 ctx.copy(input = itemName),
@@ -561,15 +588,25 @@ class XmlBindingTraitSerializerGenerator(
         }
     }
 
+    private fun listIterable(
+        listShape: CollectionShape,
+        input: String,
+    ): String =
+        when (symbolProvider.toSymbol(listShape).rustType()) {
+            is RustType.Vec, is RustType.HashSet -> input
+            else -> "($input).inner()"
+        }
+
     private fun RustWriter.serializeMap(
         mapShape: MapShape,
         entryName: String,
         ctx: Ctx.Scope,
+        entryNamespace: String = "",
     ) {
         val key = safeName("key")
         val value = safeName("value")
         rustBlock("for ($key, $value) in ${ctx.input}") {
-            rust("""let mut entry = ${ctx.scopeWriter}.start_el(${entryName.dq()}).finish();""")
+            rust("""let mut entry = ${ctx.scopeWriter}.start_el(${entryName.dq()})$entryNamespace.finish();""")
             serializeMember(mapShape.key, ctx.copy(scopeWriter = "entry", input = key))
             serializeMember(mapShape.value, ctx.copy(scopeWriter = "entry", input = value))
         }

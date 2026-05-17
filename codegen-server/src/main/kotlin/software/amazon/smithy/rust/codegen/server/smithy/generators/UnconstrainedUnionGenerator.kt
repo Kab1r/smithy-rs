@@ -175,6 +175,7 @@ class UnconstrainedUnionGenerator(
             if (shape.isReachableFromOperationInput()) {
                 rustTemplate(
                     """
+                    ##[allow(dead_code)]
                     impl $constraintViolationName {
                         #{UnionShapeConstraintViolationImplBlock:W}
                     }

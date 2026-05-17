@@ -85,6 +85,34 @@ interface ServerProtocol : Protocol {
     fun serverRouterRequestSpecType(requestSpecModule: RuntimeType): RuntimeType
 
     /**
+     * Returns the request body type used by each per-operation route.
+     *
+     * Most protocols route without touching the request body, so the route receives the same body type as the outer
+     * service. Query protocols route by inspecting the form-encoded body and then replaying it to the operation, so
+     * they wrap the body in a protocol-specific replayable body type.
+     */
+    fun serverRouteRequestBodyTypePath(
+        bodyType: String,
+        smithyHttpServer: RuntimeType,
+    ): String = bodyType.replace("#{SmithyHttpServer}", smithyHttpServer.path)
+
+    fun serverRouteRequestBodyType(
+        bodyType: String,
+        smithyHttpServer: RuntimeType,
+    ): Writable =
+        writable {
+            rust(serverRouteRequestBodyTypePath(bodyType, smithyHttpServer))
+        }
+
+    /**
+     * Returns the HTTP status code for a modeled error response.
+     */
+    fun errorStatusCode(
+        errorShape: StructureShape,
+        defaultCode: Int,
+    ): Int = defaultCode
+
+    /**
      * In some protocols, such as `restJson1` and `rpcv2Cbor`,
      * when there is no modeled body input, `content-type` must not be set and the body must be empty.
      * Returns a boolean indicating whether to perform this check.

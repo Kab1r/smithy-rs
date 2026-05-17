@@ -171,6 +171,7 @@ class ServerBuilderConstraintViolations(
     private fun renderAsValidationExceptionFieldList(writer: RustWriter) {
         writer.rustTemplate(
             """
+            ##[allow(dead_code)]
             impl ConstraintViolation {
                 #{ValidationExceptionFnWritable:W}
             }

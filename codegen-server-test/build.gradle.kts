@@ -113,6 +113,16 @@ val commonCodegenTests = "../codegen-core/common-test-models".let { commonModels
             "json_rpc11",
         ),
         CodegenTest(
+            "aws.protocoltests.query#AwsQuery",
+            "aws_query",
+            extraCodegenConfig = """"debugMode": true""",
+        ),
+        CodegenTest(
+            "aws.protocoltests.ec2#AwsEc2",
+            "ec2_query",
+            extraCodegenConfig = """"debugMode": true""",
+        ),
+        CodegenTest(
             "aws.protocoltests.misc#MiscService",
             "misc",
             imports = listOf("$commonModels/misc.smithy"),

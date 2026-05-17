@@ -103,6 +103,7 @@ class CollectionConstraintViolationGenerator(
             if (shape.isReachableFromOperationInput()) {
                 rustTemplate(
                     """
+                    ##[allow(dead_code)]
                     impl $constraintViolationName {
                         #{CollectionShapeConstraintViolationImplBlock}
                     }

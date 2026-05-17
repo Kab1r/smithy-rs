@@ -10,6 +10,7 @@
 
 use crate::error::{BoxError, Error};
 use bytes::Bytes;
+use std::fmt;
 
 // Used in the codegen in trait bounds.
 #[doc(hidden)]
@@ -30,6 +31,19 @@ pub type BoxBody = http_body_util::combinators::UnsyncBoxBody<Bytes, Error>;
 /// This is used specifically for event streaming operations and lambda handlers
 /// that need thread safety guarantees.
 pub type BoxBodySync = http_body_util::combinators::BoxBody<Bytes, Error>;
+
+/// Error type used by protocol routers that replay a consumed request body.
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct QueryBodyError(pub(crate) Error);
+
+impl fmt::Display for QueryBodyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for QueryBodyError {}
 
 // ============================================================================
 // Body Construction Functions

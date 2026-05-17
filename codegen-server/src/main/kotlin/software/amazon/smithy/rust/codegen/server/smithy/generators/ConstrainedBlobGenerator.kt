@@ -153,6 +153,7 @@ class ConstrainedBlobGenerator(
         if (shape.isReachableFromOperationInput()) {
             writer.rustTemplate(
                 """
+                ##[allow(dead_code)]
                 impl ${constraintViolation.name} {
                     #{BlobShapeConstraintViolationImplBlock}
                 }

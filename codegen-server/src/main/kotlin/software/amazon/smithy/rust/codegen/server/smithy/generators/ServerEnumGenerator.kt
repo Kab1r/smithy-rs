@@ -69,6 +69,7 @@ open class ConstrainedEnum(
             if (shape.isReachableFromOperationInput()) {
                 rustTemplate(
                     """
+                    ##[allow(dead_code)]
                     impl $constraintViolationName {
                         #{EnumShapeConstraintViolationImplBlock:W}
                     }

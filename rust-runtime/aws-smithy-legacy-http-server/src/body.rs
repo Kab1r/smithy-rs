@@ -12,11 +12,25 @@ pub use http_body::Body as HttpBody;
 pub use hyper::body::Body;
 
 use bytes::Bytes;
+use std::fmt;
 
 use crate::error::{BoxError, Error};
 
 /// The primary [`Body`] returned by the generated `smithy-rs` service.
 pub type BoxBody = http_body::combinators::UnsyncBoxBody<Bytes, Error>;
+
+/// Error type used by protocol routers that replay a consumed request body.
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct QueryBodyError(pub(crate) Error);
+
+impl fmt::Display for QueryBodyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for QueryBodyError {}
 
 // `boxed` is used in the codegen of the implementation of the operation `Handler` trait.
 /// Convert a [`http_body::Body`] into a [`BoxBody`].

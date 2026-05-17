@@ -46,7 +46,7 @@ import software.amazon.smithy.rust.codegen.core.util.inputShape
 import software.amazon.smithy.rust.codegen.core.util.isTargetUnit
 import software.amazon.smithy.rust.codegen.core.util.orNull
 
-abstract class QuerySerializerGenerator(private val codegenContext: CodegenContext) : StructuredDataSerializerGenerator {
+abstract class QuerySerializerGenerator(protected val codegenContext: CodegenContext) : StructuredDataSerializerGenerator {
     protected data class Context<T : Shape>(
         /** Expression that yields a QueryValueWriter */
         val writerExpression: String,
@@ -92,13 +92,13 @@ abstract class QuerySerializerGenerator(private val codegenContext: CodegenConte
     protected val symbolProvider = codegenContext.symbolProvider
     protected val runtimeConfig = codegenContext.runtimeConfig
     private val target = codegenContext.target
-    private val serviceShape = codegenContext.serviceShape
+    protected val serviceShape = codegenContext.serviceShape
     private val serializerError = runtimeConfig.serializationError()
     private val smithyTypes = RuntimeType.smithyTypes(runtimeConfig)
     private val smithyQuery = RuntimeType.smithyQuery(runtimeConfig)
     private val serdeUtil = SerializerUtil(model, symbolProvider)
-    private val protocolFunctions = ProtocolFunctions(codegenContext)
-    private val codegenScope =
+    protected val protocolFunctions = ProtocolFunctions(codegenContext)
+    protected val codegenScope =
         arrayOf(
             "String" to RuntimeType.String,
             "Error" to serializerError,

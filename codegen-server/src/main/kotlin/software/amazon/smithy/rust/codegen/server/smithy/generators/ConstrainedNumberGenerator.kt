@@ -158,6 +158,7 @@ class ConstrainedNumberGenerator(
             if (shape.isReachableFromOperationInput()) {
                 rustTemplate(
                     """
+                    ##[allow(dead_code)]
                     impl ${constraintViolation.name} {
                         #{NumberShapeConstraintViolationImplBlock}
                     }

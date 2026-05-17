@@ -18,6 +18,7 @@ import software.amazon.smithy.rust.codegen.core.rustlang.join
 import software.amazon.smithy.rust.codegen.core.rustlang.rust
 import software.amazon.smithy.rust.codegen.core.rustlang.rustTemplate
 import software.amazon.smithy.rust.codegen.core.rustlang.writable
+import software.amazon.smithy.rust.codegen.core.smithy.HttpVersion
 import software.amazon.smithy.rust.codegen.core.smithy.RuntimeType
 import software.amazon.smithy.rust.codegen.core.util.hasTrait
 import software.amazon.smithy.rust.codegen.core.util.letIf
@@ -70,9 +71,34 @@ class ServerServiceGenerator(
     /** Associate each operation with the name of the corresponding Zero-Sized Type (ZST) struct name. */
     private val operationStructNames = operations.associateWith { symbolProvider.toSymbol(it).name.toPascalCase() }
 
+    private fun routeRequestBodyType(bodyType: String): RuntimeType =
+        RuntimeType(
+            protocol.serverRouteRequestBodyTypePath(bodyType, smithyHttpServer),
+            smithyHttpServer.dependency,
+        )
+
+    private fun routeType(bodyType: String): RuntimeType =
+        RuntimeType(
+            "${smithyHttpServer.path}::routing::Route<${routeRequestBodyType(bodyType).path}>",
+            smithyHttpServer.dependency,
+        )
+
+    private fun defaultRequestBodyType(): RuntimeType =
+        when (runtimeConfig.httpVersion) {
+            HttpVersion.Http1x -> RuntimeType.hyper(runtimeConfig).resolve("body::Incoming")
+            HttpVersion.Http0x -> RuntimeType.Hyper0x.resolve("body::Body")
+        }
+
     /** A `Writable` block of "field: Type" for the builder. */
     private val builderFields =
-        builderFieldNames.values.map { name -> "$name: Option<#{SmithyHttpServer}::routing::Route<Body>>" }
+        builderFieldNames.values.map { name ->
+            writable {
+                rustTemplate(
+                    "$name: Option<#{RouteType}>",
+                    "RouteType" to routeType("Body"),
+                )
+            }
+        }.join(", ")
 
     /** The name of the local private module containing the functions that return the request for each operation */
     private val requestSpecsModuleName = "request_specs"
@@ -140,7 +166,7 @@ class ServerServiceGenerator(
                     ///     /* Set other handlers */
                     ///     .build()
                     ///     .unwrap();
-                    /// ## let app: $serviceName<#{SmithyHttpServer}::routing::RoutingService<#{Router}<#{SmithyHttpServer}::routing::Route>, #{Protocol}>> = app;
+                    /// ## let app: $serviceName<#{SmithyHttpServer}::routing::RoutingService<#{Router}<#{DocRouteType}>, #{Protocol}>> = app;
                     /// ```
                     ///
                     pub fn $fieldName<HandlerType, HandlerExtractors, UpgradeExtractors>(self, handler: HandlerType) -> Self
@@ -170,8 +196,8 @@ class ServerServiceGenerator(
                             >::Output
                         >,
 
-                        HttpPl::Output: #{Tower}::Service<#{Http}::Request<Body>, Response = #{Http}::Response<#{SmithyHttpServer}::body::BoxBody>, Error = ::std::convert::Infallible> + Clone + Send + 'static,
-                        <HttpPl::Output as #{Tower}::Service<#{Http}::Request<Body>>>::Future: Send + 'static,
+                        HttpPl::Output: #{Tower}::Service<#{Http}::Request<#{RouteBody}>, Response = #{Http}::Response<#{SmithyHttpServer}::body::BoxBody>, Error = ::std::convert::Infallible> + Clone + Send + 'static,
+                        <HttpPl::Output as #{Tower}::Service<#{Http}::Request<#{RouteBody}>>>::Future: Send + 'static,
 
                     {
                         use #{SmithyHttpServer}::operation::OperationShapeExt;
@@ -204,7 +230,7 @@ class ServerServiceGenerator(
                     ///     /* Set other handlers */
                     ///     .build()
                     ///     .unwrap();
-                    /// ## let app: $serviceName<#{SmithyHttpServer}::routing::RoutingService<#{Router}<#{SmithyHttpServer}::routing::Route>, #{Protocol}>> = app;
+                    /// ## let app: $serviceName<#{SmithyHttpServer}::routing::RoutingService<#{Router}<#{DocRouteType}>, #{Protocol}>> = app;
                     /// ```
                     ///
                     pub fn ${fieldName}_service<S, ServiceExtractors, UpgradeExtractors>(self, service: S) -> Self
@@ -234,8 +260,8 @@ class ServerServiceGenerator(
                             >::Output
                         >,
 
-                        HttpPl::Output: #{Tower}::Service<#{Http}::Request<Body>, Response = #{Http}::Response<#{SmithyHttpServer}::body::BoxBody>, Error = ::std::convert::Infallible> + Clone + Send + 'static,
-                        <HttpPl::Output as #{Tower}::Service<#{Http}::Request<Body>>>::Future: Send + 'static,
+                        HttpPl::Output: #{Tower}::Service<#{Http}::Request<#{RouteBody}>, Response = #{Http}::Response<#{SmithyHttpServer}::body::BoxBody>, Error = ::std::convert::Infallible> + Clone + Send + 'static,
+                        <HttpPl::Output as #{Tower}::Service<#{Http}::Request<#{RouteBody}>>>::Future: Send + 'static,
 
                     {
                         use #{SmithyHttpServer}::operation::OperationShapeExt;
@@ -251,7 +277,7 @@ class ServerServiceGenerator(
                     /// not constrained by the Smithy contract.
                     fn ${fieldName}_custom<S>(mut self, svc: S) -> Self
                     where
-                        S: #{Tower}::Service<#{Http}::Request<Body>, Response = #{Http}::Response<#{SmithyHttpServer}::body::BoxBody>, Error = ::std::convert::Infallible> + Clone + Send + 'static,
+                        S: #{Tower}::Service<#{Http}::Request<#{RouteBody}>, Response = #{Http}::Response<#{SmithyHttpServer}::body::BoxBody>, Error = ::std::convert::Infallible> + Clone + Send + 'static,
                         S::Future: Send + 'static,
                     {
                         self.$fieldName = Some(#{SmithyHttpServer}::routing::Route::new(svc));
@@ -263,6 +289,9 @@ class ServerServiceGenerator(
                     "Handler" to handler,
                     "HandlerFixed" to handlerFixed,
                     "HandlerImports" to handlerImports(crateName, operations),
+                    "RouteBody" to routeRequestBodyType("Body"),
+                    "RouteType" to routeType("Body"),
+                    "DocRouteType" to routeType(defaultRequestBodyType().path),
                     *codegenScope,
                 )
 
@@ -321,7 +350,7 @@ class ServerServiceGenerator(
                     MissingOperationsError,
                 >
                 where
-                    L: #{Tower}::Layer<#{SmithyHttpServer}::routing::Route<Body>>,
+                    L: #{Tower}::Layer<#{RouteType}>,
                 {
                     let router = {
                         use #{SmithyHttpServer}::operation::OperationShape;
@@ -349,6 +378,7 @@ class ServerServiceGenerator(
                 "NullabilityChecks" to nullabilityChecks,
                 "RoutesArrayElements" to routesArrayElements,
                 "PatternInitializations" to patternInitializations(),
+                "RouteType" to routeType("Body"),
                 *RuntimeType.preludeScope,
             )
         }
@@ -411,7 +441,7 @@ class ServerServiceGenerator(
                 where
                     Body: Send + 'static,
                     L: #{Tower}::Layer<
-                        #{SmithyHttpServer}::routing::RoutingService<#{Router}<#{SmithyHttpServer}::routing::Route<Body>>, #{Protocol}>
+                        #{SmithyHttpServer}::routing::RoutingService<#{Router}<#{RouteType}>, #{Protocol}>
                     >
                 {
                     let router = #{Router}::from_iter([#{Pairs:W}]);
@@ -425,6 +455,7 @@ class ServerServiceGenerator(
                 "Protocol" to protocol.markerStruct(),
                 "Router" to protocol.routerType(),
                 "Pairs" to pairs,
+                "RouteType" to routeType("Body"),
             )
         }
 
@@ -438,7 +469,7 @@ class ServerServiceGenerator(
                 ///
                 /// Constructed via [`$serviceName::builder`].
                 pub struct $builderName<$builderGenerics> {
-                    ${builderFields.joinToString(", ")},
+                    #{BuilderFields:W},
                     layer: L,
                     http_plugin: HttpPl,
                     model_plugin: ModelPl
@@ -457,6 +488,7 @@ class ServerServiceGenerator(
                 "Setters" to builderSetters(),
                 "BuildMethod" to buildMethod(),
                 "BuildUncheckedMethod" to buildUncheckedMethod(),
+                "BuilderFields" to builderFields,
                 *codegenScope,
             )
         }
@@ -509,7 +541,7 @@ class ServerServiceGenerator(
                     S = #{SmithyHttpServer}::routing::RoutingService<
                         #{Router}<
                             #{SmithyHttpServer}::routing::Route<
-                                #{SmithyHttpServer}::body::BoxBody
+                                #{DefaultRouteBody}
                             >,
                         >,
                         #{Protocol},
@@ -635,14 +667,14 @@ class ServerServiceGenerator(
                     ) -> $serviceName<
                         #{SmithyHttpServer}::routing::RoutingService<
                             #{Router}<
-                                #{SmithyHttpServer}::routing::Route<B>,
+                                #{SmithyHttpServer}::routing::Route<#{RouteBody}>,
                             >,
                             #{Protocol},
                         >,
                     >
                     where
                         S: #{Tower}::Service<
-                            #{Http}::Request<B>,
+                            #{Http}::Request<#{RouteBody}>,
                             Response = #{Http}::Response<#{SmithyHttpServer}::body::BoxBody>,
                             Error = std::convert::Infallible,
                         >,
@@ -676,6 +708,8 @@ class ServerServiceGenerator(
                 "NotSetFields2" to notSetFields(),
                 "Router" to protocol.routerType(),
                 "Protocol" to protocol.markerStruct(),
+                "DefaultRouteBody" to routeRequestBodyType("#{SmithyHttpServer}::body::BoxBody"),
+                "RouteBody" to routeRequestBodyType("B"),
                 *codegenScope,
             )
         }

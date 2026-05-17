@@ -38,6 +38,8 @@ import software.amazon.smithy.rust.codegen.core.smithy.generators.protocol.Proto
 import software.amazon.smithy.rust.codegen.core.smithy.generators.protocol.ProtocolTestGenerator
 import software.amazon.smithy.rust.codegen.core.smithy.generators.protocol.ServiceShapeId.AWS_JSON_10
 import software.amazon.smithy.rust.codegen.core.smithy.generators.protocol.ServiceShapeId.AWS_JSON_11
+import software.amazon.smithy.rust.codegen.core.smithy.generators.protocol.ServiceShapeId.AWS_QUERY
+import software.amazon.smithy.rust.codegen.core.smithy.generators.protocol.ServiceShapeId.EC2_QUERY
 import software.amazon.smithy.rust.codegen.core.smithy.generators.protocol.ServiceShapeId.REST_JSON
 import software.amazon.smithy.rust.codegen.core.smithy.generators.protocol.ServiceShapeId.REST_JSON_VALIDATION
 import software.amazon.smithy.rust.codegen.core.smithy.generators.protocol.ServiceShapeId.RPC_V2_CBOR
@@ -102,6 +104,24 @@ class ServerProtocolTestGenerator(
                 FailingTest.RequestTest(AWS_JSON_11, "AwsJson11EndpointTraitWithHostLabel"),
                 FailingTest.RequestTest(AWS_JSON_11, "AwsJson11EndpointTrait"),
                 FailingTest.ResponseTest(AWS_JSON_11, "parses_the_request_id_from_the_response"),
+                // Endpoint trait is not implemented yet, see https://github.com/smithy-lang/smithy-rs/issues/950.
+                FailingTest.RequestTest(AWS_QUERY, "AwsQueryEndpointTrait"),
+                FailingTest.RequestTest(AWS_QUERY, "AwsQueryEndpointTraitWithHostLabel"),
+                FailingTest.RequestTest(EC2_QUERY, "Ec2QueryEndpointTrait"),
+                FailingTest.RequestTest(EC2_QUERY, "Ec2QueryEndpointTraitWithHostLabel"),
+                // Query form encoding has no representation for an absent empty map/list versus an explicitly empty one.
+                FailingTest.RequestTest(AWS_QUERY, "QueryEmptyQueryMaps"),
+                FailingTest.RequestTest(EC2_QUERY, "Ec2EmptyQueryLists"),
+                // These EC2 response tests are client parsing tests expressed as server response tests. The server test
+                // instantiates DateTime from an epoch, so the original offset cannot be preserved during serialization.
+                FailingTest.ResponseTest(EC2_QUERY, "Ec2QueryDateTimeWithNegativeOffset"),
+                FailingTest.ResponseTest(EC2_QUERY, "Ec2QueryDateTimeWithPositiveOffset"),
+                // Broken EC2 protocol tests: ComplexError expects an unmodeled Message member, and these float output
+                // cases omit the EC2 requestId that the rest of the success-output suite requires.
+                FailingTest.ResponseTest(EC2_QUERY, "Ec2ComplexError"),
+                FailingTest.ResponseTest(EC2_QUERY, "Ec2QuerySupportsNaNFloatOutputs"),
+                FailingTest.ResponseTest(EC2_QUERY, "Ec2QuerySupportsInfinityFloatOutputs"),
+                FailingTest.ResponseTest(EC2_QUERY, "Ec2QuerySupportsNegativeInfinityFloatOutputs"),
                 // TODO(https://github.com/awslabs/smithy/issues/1683): This has been marked as failing until resolution of said issue
                 FailingTest.MalformedRequestTest(REST_JSON_VALIDATION, "RestJsonMalformedUniqueItemsBlobList"),
                 FailingTest.MalformedRequestTest(REST_JSON_VALIDATION, "RestJsonMalformedUniqueItemsBooleanList_case0"),

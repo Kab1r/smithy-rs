@@ -524,8 +524,11 @@ class ServerHttpBoundProtocolTraitImplGenerator(
                         }
                     }
                     val status =
-                        variantShape.getTrait<HttpErrorTrait>()?.code
-                            ?: errorTrait.defaultHttpStatusCode
+                        protocol.errorStatusCode(
+                            variantShape,
+                            variantShape.getTrait<HttpErrorTrait>()?.code
+                                ?: errorTrait.defaultHttpStatusCode,
+                        )
 
                     serverRenderContentLengthHeader()
 
