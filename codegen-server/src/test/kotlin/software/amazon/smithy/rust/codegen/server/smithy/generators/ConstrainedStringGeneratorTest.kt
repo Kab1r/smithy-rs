@@ -25,6 +25,8 @@ import software.amazon.smithy.rust.codegen.core.util.lookup
 import software.amazon.smithy.rust.codegen.server.smithy.ServerRustModule
 import software.amazon.smithy.rust.codegen.server.smithy.createTestInlineModuleCreator
 import software.amazon.smithy.rust.codegen.server.smithy.customizations.SmithyValidationExceptionConversionGenerator
+import software.amazon.smithy.rust.codegen.server.smithy.testutil.HttpTestType
+import software.amazon.smithy.rust.codegen.server.smithy.testutil.serverIntegrationTest
 import software.amazon.smithy.rust.codegen.server.smithy.testutil.serverTestCodegenContext
 import java.util.stream.Stream
 
@@ -221,6 +223,47 @@ class ConstrainedStringGeneratorTest {
         }
 
         project.compileAndTest()
+    }
+
+    @Test
+    fun `lowercase shape name does not collide with sibling ConstraintViolation module`() {
+        // A constrained string shape's local name is reused verbatim for two emitted Rust items:
+        //   pub struct <ShapeName>(String)                      // the type
+        //   pub mod   <shape_name> { pub enum ConstraintViolation } // the sibling module
+        // For PascalCase shape names the struct keeps the original case and the module is
+        // snake-cased, so they don't collide. For lowercase shape names (e.g. `url`, `arn`) both
+        // resolve to the same identifier in the parent module's namespace, triggering E0428 and a
+        // cascade of E0425/E0573 at every call site.
+        val model =
+            """
+            ${'$'}version: "2.0"
+
+            namespace test
+
+            use aws.protocols#restJson1
+
+            @restJson1
+            service TestService {
+                version: "2024-01-01"
+                operations: [Op]
+            }
+
+            @http(method: "POST", uri: "/op")
+            operation Op {
+                input: OpInput
+            }
+
+            structure OpInput {
+                @required
+                u: url
+            }
+
+            @length(min: 1, max: 100)
+            @pattern("^https?://.*${'$'}")
+            string url
+            """.asSmithyModel(smithyVersion = "2")
+
+        serverIntegrationTest(model, testCoverage = HttpTestType.Default)
     }
 
     @Test

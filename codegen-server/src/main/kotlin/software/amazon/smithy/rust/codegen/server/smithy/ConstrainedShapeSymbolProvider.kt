@@ -163,7 +163,12 @@ open class ConstrainedShapeSymbolProvider(
     ): Pair<String, RustModule.LeafModule> {
         val syntheticMemberTrait =
             shape.getTrait<SyntheticStructureFromConstrainedMemberTrait>()
-                ?: return Pair(shape.contextName(serviceShape), defaultModule)
+                // PascalCase-normalize the type name even when the Smithy shape's local name is
+                // lowercase (e.g. `url`, `arn`). Without this, the constrained newtype struct and
+                // its sibling `ConstraintViolation` module would share an identifier in the parent
+                // module's namespace and rustc rejects the pair with E0428 — followed by an
+                // E0425/E0573 cascade at every call site.
+                ?: return Pair(shape.contextName(serviceShape).toPascalCase(), defaultModule)
 
         return if (syntheticMemberTrait.container is StructureShape) {
             val builderModule = syntheticMemberTrait.container.serverBuilderModule(base, pubCrateServerBuilder)
