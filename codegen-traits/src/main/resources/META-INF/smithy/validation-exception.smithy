@@ -30,3 +30,9 @@ structure validationFieldName {}
 @internal
 @trait(selector: "structure > member")
 structure validationFieldMessage {}
+
+/// Supplies the framework-generated value used for a non-canonical validation exception member
+/// when smithy-rs constructs the exception to report request validation failures.
+@internal
+@trait(selector: "structure[trait|smithy.framework.rust#validationException] > member")
+string validationExceptionMemberDefault

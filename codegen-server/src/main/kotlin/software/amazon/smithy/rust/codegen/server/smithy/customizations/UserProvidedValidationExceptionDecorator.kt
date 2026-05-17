@@ -6,6 +6,7 @@
 package software.amazon.smithy.rust.codegen.server.smithy.customizations
 
 import software.amazon.smithy.codegen.core.CodegenException
+import software.amazon.smithy.framework.rust.ValidationExceptionMemberDefaultTrait
 import software.amazon.smithy.framework.rust.ValidationExceptionTrait
 import software.amazon.smithy.framework.rust.ValidationFieldListTrait
 import software.amazon.smithy.framework.rust.ValidationFieldMessageTrait
@@ -13,6 +14,7 @@ import software.amazon.smithy.framework.rust.ValidationFieldNameTrait
 import software.amazon.smithy.framework.rust.ValidationMessageTrait
 import software.amazon.smithy.model.Model
 import software.amazon.smithy.model.SourceLocation
+import software.amazon.smithy.model.node.Node
 import software.amazon.smithy.model.shapes.MapShape
 import software.amazon.smithy.model.shapes.MemberShape
 import software.amazon.smithy.model.shapes.ServiceShape
@@ -669,7 +671,10 @@ class UserProvidedValidationExceptionConversionGenerator(
 
     private fun defaultFieldAssignment(member: MemberShape): String {
         val targetShape = member.targetShape(codegenContext.model)
-        return member.getTrait<software.amazon.smithy.model.traits.DefaultTrait>()?.toNode()?.let { node ->
+        val memberDefault: Node? =
+            member.findTrait(ValidationExceptionMemberDefaultTrait.ID).orElse(null)?.toNode()
+                ?: member.getTrait<software.amazon.smithy.model.traits.DefaultTrait>()?.toNode()
+        return memberDefault?.let { node ->
             when {
                 targetShape.isEnumShape && node.isStringNode -> {
                     val enumShape = targetShape.asEnumShape().get()

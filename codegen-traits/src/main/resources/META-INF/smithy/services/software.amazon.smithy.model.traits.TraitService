@@ -3,3 +3,4 @@ software.amazon.smithy.framework.rust.ValidationMessageTrait$Provider
 software.amazon.smithy.framework.rust.ValidationFieldListTrait$Provider
 software.amazon.smithy.framework.rust.ValidationFieldNameTrait$Provider
 software.amazon.smithy.framework.rust.ValidationFieldMessageTrait$Provider
+software.amazon.smithy.framework.rust.ValidationExceptionMemberDefaultTrait$Provider

@@ -255,6 +255,64 @@ class CustomValidationExceptionValidatorTest {
     }
 
     @Test
+    fun `should allow validationExceptionMemberDefault on non-canonical constrained members`() {
+        """
+        namespace test
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationExceptionMemberDefault
+
+        @validationException
+        @error("client")
+        structure ValidationError {
+            message: String,
+
+            @validationExceptionMemberDefault("fieldValidationFailed")
+            reason: ValidationExceptionReason
+        }
+
+        enum ValidationExceptionReason {
+            FIELD_VALIDATION_FAILED = "fieldValidationFailed"
+            OTHER = "other"
+        }
+        """.asSmithyModel(smithyVersion = "2").also { model ->
+            val reason = model.expectShape(ShapeId.from("test#ValidationError${'$'}reason"))
+            reason.hasTrait(software.amazon.smithy.framework.rust.ValidationExceptionMemberDefaultTrait.ID) shouldBe true
+        }
+    }
+
+    @Test
+    fun `should error when validationExceptionMemberDefault does not satisfy an enum target`() {
+        val exception =
+            shouldThrow<ValidatedResultException> {
+                """
+                namespace test
+                use smithy.framework.rust#validationException
+                use smithy.framework.rust#validationExceptionMemberDefault
+
+                @validationException
+                @error("client")
+                structure ValidationError {
+                    message: String,
+
+                    @validationExceptionMemberDefault("notAValidVariant")
+                    reason: ValidationExceptionReason
+                }
+
+                enum ValidationExceptionReason {
+                    FIELD_VALIDATION_FAILED = "fieldValidationFailed"
+                    OTHER = "other"
+                }
+                """.asSmithyModel(smithyVersion = "2")
+            }
+
+        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+
+        events shouldHaveSize 1
+        events[0].id shouldBe "ValidationExceptionMemberDefault.InvalidValue"
+        events[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError${'$'}reason")
+    }
+
+    @Test
     fun `should still require defaults for non-canonical constrained members`() {
         val exception =
             shouldThrow<ValidatedResultException> {

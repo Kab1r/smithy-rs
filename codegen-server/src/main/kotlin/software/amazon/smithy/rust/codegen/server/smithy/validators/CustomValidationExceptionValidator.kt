@@ -5,6 +5,7 @@
 
 package software.amazon.smithy.rust.codegen.server.smithy.validators
 
+import software.amazon.smithy.framework.rust.ValidationExceptionMemberDefaultTrait
 import software.amazon.smithy.framework.rust.ValidationExceptionTrait
 import software.amazon.smithy.framework.rust.ValidationFieldListTrait
 import software.amazon.smithy.model.Model
@@ -12,6 +13,7 @@ import software.amazon.smithy.model.shapes.Shape
 import software.amazon.smithy.model.shapes.ShapeType
 import software.amazon.smithy.model.shapes.StructureShape
 import software.amazon.smithy.model.traits.DefaultTrait
+import software.amazon.smithy.model.traits.EnumValueTrait
 import software.amazon.smithy.model.traits.ErrorTrait
 import software.amazon.smithy.model.validation.AbstractValidator
 import software.amazon.smithy.model.validation.Severity
@@ -104,9 +106,11 @@ class CustomValidationExceptionValidator : AbstractValidator() {
                 val member = this.asMemberShape().get()
                 val isCanonicalValidationExceptionMember =
                     member.isValidationMessage() || member.hasTrait(ValidationFieldListTrait.ID)
+                member.validateValidationExceptionMemberDefault(model, events)
                 // We want to check if the member's target is constrained. If so, we want the default trait to be on the
                 // member.
                 if (!isCanonicalValidationExceptionMember &&
+                    !this.hasTrait(ValidationExceptionMemberDefaultTrait.ID) &&
                     this.targetOrSelf(model).isDirectlyConstrainedForValidation() &&
                     !this.hasTrait<DefaultTrait>()
                 ) {
@@ -121,6 +125,40 @@ class CustomValidationExceptionValidator : AbstractValidator() {
             }
 
             else -> return
+        }
+    }
+
+    private fun Shape.validateValidationExceptionMemberDefault(
+        model: Model,
+        events: MutableList<ValidationEvent>,
+    ) {
+        val trait = this.findTrait(ValidationExceptionMemberDefaultTrait.ID).orElse(null) ?: return
+        val member = this.asMemberShape().get()
+        val value = trait.toNode().expectStringNode().value
+        val target = member.targetOrSelf(model)
+
+        val isValid =
+            when {
+                target.isEnumShape -> {
+                    val enumShape = target.asEnumShape().get()
+                    enumShape.members().any { enumMember ->
+                        enumMember.getTrait(EnumValueTrait::class.java)
+                            .map { it.stringValue.orElse(enumMember.memberName) }
+                            .orElse(enumMember.memberName) == value
+                    }
+                }
+
+                else -> true
+            }
+
+        if (!isValid) {
+            events.add(
+                ValidationEvent.builder().id("ValidationExceptionMemberDefault.InvalidValue")
+                    .severity(Severity.ERROR)
+                    .shape(this)
+                    .message("$member has an invalid @validationExceptionMemberDefault value: $value")
+                    .build(),
+            )
         }
     }
 }

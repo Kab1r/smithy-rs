@@ -7,6 +7,7 @@ package software.amazon.smithy.rust.codegen.server.smithy.customizations
 
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
 import software.amazon.smithy.framework.rust.ValidationExceptionTrait
 import software.amazon.smithy.framework.rust.ValidationFieldListTrait
@@ -586,5 +587,61 @@ internal class UserProvidedValidationExceptionDecoratorTest {
     @Test
     fun `code compiles with constrained additional field default`() {
         serverIntegrationTest(modelWithConstrainedAdditionalFieldDefault, testCoverage = HttpTestType.Default)
+    }
+
+    private val modelWithValidationExceptionMemberDefault =
+        """
+        namespace com.aws.example
+
+        use aws.protocols#restJson1
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationExceptionMemberDefault
+        use smithy.framework.rust#validationMessage
+
+        @restJson1
+        service CustomValidationExample {
+            version: "1.0.0"
+            operations: [
+                TestOperation
+            ]
+            errors: [
+                MyCustomValidationException
+            ]
+        }
+
+        @http(method: "POST", uri: "/test")
+        operation TestOperation {
+            input: TestInput
+        }
+
+        structure TestInput {
+            @required
+            @length(min: 1, max: 10)
+            name: String
+        }
+
+        @error("client")
+        @httpError(400)
+        @validationException
+        structure MyCustomValidationException {
+            @validationMessage
+            message: String
+
+            @required
+            @validationExceptionMemberDefault("fieldValidationFailed")
+            reason: ValidationExceptionReason
+        }
+
+        enum ValidationExceptionReason {
+            FIELD_VALIDATION_FAILED = "fieldValidationFailed"
+            OTHER = "other"
+        }
+        """.asSmithyModel(smithyVersion = "2.0")
+
+    @Test
+    fun `code compiles with validationExceptionMemberDefault on constrained additional field`() {
+        val generatedServers = serverIntegrationTest(modelWithValidationExceptionMemberDefault, testCoverage = HttpTestType.Default)
+        val generatedInput = generatedServers.single().path.resolve("src/input.rs").toFile().readText()
+        generatedInput shouldContain "reason: crate::model::ValidationExceptionReason::FieldValidationFailed"
     }
 }
