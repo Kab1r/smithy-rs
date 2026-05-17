@@ -36,6 +36,50 @@ class NamingObstacleCourseTest {
     // by type — including from nested collections and from constrained inputs — must resolve
     // `crate::model::Namespace`, not `crate::model::namespace`, the builder module, or rustc
     // fails with E0573 "expected type, found module".
+    // Operation outputs may carry a `@httpPayload`-bound Blob. The generated builder must end up
+    // assigning the deserialized Blob to a field that is itself typed as `Blob` (not `Vec<u8>`),
+    // otherwise rustc reports E0308 `expected Vec<u8>, found Blob` and every such service stops
+    // compiling.
+    @Test
+    fun `operations with a Blob HTTP payload output compile`() {
+        val model =
+            """
+            namespace test
+
+            use aws.protocols#restJson1
+
+            @restJson1
+            service InvokeService {
+                version: "1.0.0"
+                operations: [InvokeEndpoint]
+            }
+
+            @http(method: "POST", uri: "/endpoints/{EndpointName}/invocations")
+            operation InvokeEndpoint {
+                input: InvokeEndpointInput
+                output: InvokeEndpointOutput
+            }
+
+            structure InvokeEndpointInput {
+                @httpLabel
+                @required
+                EndpointName: String
+
+                @httpPayload
+                @required
+                Body: Blob
+            }
+
+            structure InvokeEndpointOutput {
+                @httpPayload
+                @required
+                Body: Blob
+            }
+            """.asSmithyModel(smithyVersion = "2")
+
+        serverIntegrationTest(model) { _, _ -> }
+    }
+
     @Test
     fun `types referenced by other shapes are reached as PascalCase, not via the builder module`() {
         val model =
