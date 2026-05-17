@@ -90,6 +90,7 @@ import software.amazon.smithy.rust.codegen.server.smithy.transformers.AttachVali
 import software.amazon.smithy.rust.codegen.server.smithy.transformers.ConstrainedMemberTransform
 import software.amazon.smithy.rust.codegen.server.smithy.transformers.RecursiveConstraintViolationBoxer
 import software.amazon.smithy.rust.codegen.server.smithy.transformers.RemoveEbsModelValidationException
+import software.amazon.smithy.rust.codegen.server.smithy.transformers.ReplaceFrameworkValidationExceptionWithUserDefined
 import software.amazon.smithy.rust.codegen.server.smithy.transformers.ServerProtocolBasedTransformationFactory
 import software.amazon.smithy.rust.codegen.server.smithy.transformers.ShapesReachableFromOperationInputTagger
 import java.util.logging.Logger
@@ -209,6 +210,10 @@ open class ServerCodegenVisitor(
             // Attach the `smithy.framework#ValidationException` error to operations whose inputs are constrained,
             // if either the operation belongs to a service in the allowlist, or the codegen flag to add the exception has been set.
             .let { AttachValidationExceptionToConstrainedOperationInputs.transform(it, settings) }
+            // When a custom validation exception is modeled, rewire any remaining references to
+            // `smithy.framework#ValidationException` and remove the framework shape from the model
+            // so it does not collide with the user-defined one during codegen.
+            .let(ReplaceFrameworkValidationExceptionWithUserDefined::transform)
             // Tag aggregate shapes reachable from operation input
             .let(ShapesReachableFromOperationInputTagger::transform)
             // Remove traits that are not supported by the chosen protocol.

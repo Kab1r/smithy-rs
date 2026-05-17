@@ -701,4 +701,50 @@ internal class UserProvidedValidationExceptionDecoratorTest {
         val generatedInput = generatedServers.single().path.resolve("src/input.rs").toFile().readText()
         generatedInput shouldContain "reason: Some(crate::model::ValidationExceptionReason::FieldValidationFailed)"
     }
+
+    private val modelWithCollidingFrameworkValidationException =
+        """
+        namespace com.aws.example
+
+        use aws.protocols#restJson1
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationMessage
+
+        @restJson1
+        service CustomValidationExample {
+            version: "1.0.0"
+            operations: [
+                TestOperation
+            ]
+        }
+
+        @http(method: "POST", uri: "/test")
+        operation TestOperation {
+            input: TestInput
+            errors: [smithy.framework#ValidationException]
+        }
+
+        structure TestInput {
+            @required
+            @length(min: 1, max: 10)
+            name: String
+        }
+
+        @error("client")
+        @httpError(400)
+        @validationException
+        structure ValidationException {
+            @required
+            @validationMessage
+            message: String
+        }
+        """.asSmithyModel(smithyVersion = "2.0")
+
+    @Test
+    fun `framework validation exception is not emitted when a user-modeled one exists with the same local name`() {
+        val generatedServers = serverIntegrationTest(modelWithCollidingFrameworkValidationException, testCoverage = HttpTestType.Default)
+        val errorRs = generatedServers.single().path.resolve("src/error.rs").toFile().readText()
+        val occurrences = Regex("""pub struct ValidationException\b""").findAll(errorRs).count()
+        occurrences shouldBe 1
+    }
 }
