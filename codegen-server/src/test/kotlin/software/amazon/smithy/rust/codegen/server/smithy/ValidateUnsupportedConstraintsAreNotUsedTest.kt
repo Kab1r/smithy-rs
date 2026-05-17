@@ -350,7 +350,7 @@ internal class ValidateUnsupportedConstraintsAreNotUsedTest {
     }
 
     @Test
-    fun `it should abort when ignoreUnsupportedConstraints is true and all used constraints are supported`() {
+    fun `it should warn when ignoreUnsupportedConstraints is true and all used constraints are supported`() {
         val allConstraintTraitsAreSupported =
             File("../codegen-core/common-test-models/constraints.smithy")
                 .readText()
@@ -363,7 +363,8 @@ internal class ValidateUnsupportedConstraintsAreNotUsedTest {
             )
 
         validationResult.messages shouldHaveSize 1
-        validationResult.shouldAbort shouldBe true
+        validationResult.shouldAbort shouldBe false
+        validationResult.messages[0].level shouldBe Level.WARNING
         validationResult.messages[0].message shouldContain (
             """
             The `ignoreUnsupportedConstraints` flag in the `codegen` configuration is set to `true`, but it has no

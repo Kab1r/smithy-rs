@@ -479,7 +479,7 @@ fun validateUnsupportedConstraints(
     if (messages.isEmpty() && codegenConfig.ignoreUnsupportedConstraints) {
         messages +=
             LogMessage(
-                Level.SEVERE,
+                Level.WARNING,
                 """
                 The `ignoreUnsupportedConstraints` flag in the `codegen` configuration is set to `true`, but it has no
                 effect. All the constraint traits used in the model are well-supported, please remove this flag.
