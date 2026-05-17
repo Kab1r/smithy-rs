@@ -409,6 +409,68 @@ class ConstrainedCollectionGeneratorTest {
         project.compileAndTest()
     }
 
+    @Test
+    fun `constrained list newtype implements IntoIterator over its inner Vec`() {
+        // Generated protocol-serde modules iterate over a constrained-list field directly with
+        // `for x in &input.field`, which only compiles when the newtype itself (or a reference to
+        // it) implements `IntoIterator`. Without these impls the codegen emits E0277 across every
+        // service that uses a constrained list.
+        val model =
+            """
+            namespace test
+
+            @length(min: 0, max: 100)
+            list ConstrainedList {
+                member: String
+            }
+            """.asSmithyModel().let(ShapesReachableFromOperationInputTagger::transform)
+        val constrainedListShape = model.lookup<CollectionShape>("test#ConstrainedList")
+
+        val codegenContext = serverTestCodegenContext(model)
+        val project = TestWorkspace.testProject(codegenContext.symbolProvider)
+        project.withModule(ServerRustModule.Model) {
+            render(codegenContext, this, constrainedListShape)
+
+            unitTest(
+                name = "iterates_by_shared_reference",
+                test = """
+                    let constrained: ConstrainedList = vec!["a".to_owned(), "b".to_owned()]
+                        .try_into()
+                        .unwrap();
+                    let mut collected = Vec::new();
+                    for item in &constrained {
+                        collected.push(item.clone());
+                    }
+                    assert_eq!(collected, vec!["a".to_owned(), "b".to_owned()]);
+                """,
+            )
+            unitTest(
+                name = "iterates_by_mutable_reference",
+                test = """
+                    let mut constrained: ConstrainedList = vec!["a".to_owned(), "b".to_owned()]
+                        .try_into()
+                        .unwrap();
+                    for item in &mut constrained {
+                        item.push('!');
+                    }
+                    let inner = constrained.into_inner();
+                    assert_eq!(inner, vec!["a!".to_owned(), "b!".to_owned()]);
+                """,
+            )
+            unitTest(
+                name = "iterates_by_value",
+                test = """
+                    let constrained: ConstrainedList = vec!["a".to_owned(), "b".to_owned()]
+                        .try_into()
+                        .unwrap();
+                    let collected: Vec<String> = constrained.into_iter().collect();
+                    assert_eq!(collected, vec!["a".to_owned(), "b".to_owned()]);
+                """,
+            )
+        }
+        project.compileAndTest()
+    }
+
     private fun render(
         codegenContext: ServerCodegenContext,
         writer: RustWriter,

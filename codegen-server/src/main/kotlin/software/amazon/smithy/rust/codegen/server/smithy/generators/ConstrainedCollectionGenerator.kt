@@ -148,6 +148,30 @@ class ConstrainedCollectionGenerator(
                     value.into_inner()
                 }
             }
+
+            impl ::std::iter::IntoIterator for $name {
+                type Item = #{ValueMemberSymbol};
+                type IntoIter = ::std::vec::IntoIter<#{ValueMemberSymbol}>;
+                fn into_iter(self) -> Self::IntoIter {
+                    self.0.into_iter()
+                }
+            }
+
+            impl<'a> ::std::iter::IntoIterator for &'a $name {
+                type Item = &'a #{ValueMemberSymbol};
+                type IntoIter = ::std::slice::Iter<'a, #{ValueMemberSymbol}>;
+                fn into_iter(self) -> Self::IntoIter {
+                    self.0.iter()
+                }
+            }
+
+            impl<'a> ::std::iter::IntoIterator for &'a mut $name {
+                type Item = &'a mut #{ValueMemberSymbol};
+                type IntoIter = ::std::slice::IterMut<'a, #{ValueMemberSymbol}>;
+                fn into_iter(self) -> Self::IntoIter {
+                    self.0.iter_mut()
+                }
+            }
             """,
             *codegenScope,
             "ConstraintChecks" to constraintsInfo.map { it.tryFromCheck }.join("\n"),
