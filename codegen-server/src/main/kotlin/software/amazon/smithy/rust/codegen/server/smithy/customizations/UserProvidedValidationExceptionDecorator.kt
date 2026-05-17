@@ -35,6 +35,7 @@ import software.amazon.smithy.rust.codegen.core.rustlang.withBlock
 import software.amazon.smithy.rust.codegen.core.rustlang.writable
 import software.amazon.smithy.rust.codegen.core.smithy.RuntimeType.Companion.preludeScope
 import software.amazon.smithy.rust.codegen.core.smithy.RustSymbolProvider
+import software.amazon.smithy.rust.codegen.core.smithy.isOptional
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.shapeModuleName
 import software.amazon.smithy.rust.codegen.core.util.dq
 import software.amazon.smithy.rust.codegen.core.util.expectTrait
@@ -694,22 +695,24 @@ class UserProvidedValidationExceptionConversionGenerator(
                                 enumDefinition.name.orElse(null) == enumValue || enumDefinition.value == enumValue
                             }?.name?.map { it.toSnakeCase().toPascalCase() }?.orElse(enumValue)
                         } ?: enumValue
-                    "$enumSymbol::$enumMemberName"
+                    member.wrapValueIfOptional("$enumSymbol::$enumMemberName")
                 }
 
                 node.isStringNode ->
-                    member.wrapValueInTargetTypeIfConstrained(
-                        """"${node.expectStringNode().value}".to_string()""",
+                    member.wrapValueIfOptional(
+                        member.wrapValueInTargetTypeIfConstrained(
+                            """"${node.expectStringNode().value}".to_string()""",
+                        ),
                     )
-                node.isBooleanNode -> node.expectBooleanNode().value.toString()
-                node.isNumberNode -> node.expectNumberNode().value.toString()
+                node.isBooleanNode -> member.wrapValueIfOptional(node.expectBooleanNode().value.toString())
+                node.isNumberNode -> member.wrapValueIfOptional(node.expectNumberNode().value.toString())
                 else -> "Default::default()"
             }
         } ?: "Default::default()"
     }
 
     private fun MemberShape.wrapValueIfOptional(valueExpression: String): String =
-        if (this.isOptional) {
+        if (codegenContext.symbolProvider.toSymbol(this).isOptional()) {
             "Some($valueExpression)"
         } else {
             valueExpression

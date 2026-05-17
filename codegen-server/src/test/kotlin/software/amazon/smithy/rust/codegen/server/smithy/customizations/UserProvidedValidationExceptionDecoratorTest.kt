@@ -645,4 +645,60 @@ internal class UserProvidedValidationExceptionDecoratorTest {
         val generatedInput = generatedServers.single().path.resolve("src/input.rs").toFile().readText()
         generatedInput shouldContain "reason: crate::model::ValidationExceptionReason::FieldValidationFailed"
     }
+
+    private val modelWithOptionalValidationExceptionMemberDefault =
+        """
+        namespace com.aws.example
+
+        use aws.protocols#restJson1
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationExceptionMemberDefault
+        use smithy.framework.rust#validationMessage
+
+        @restJson1
+        service CustomValidationExample {
+            version: "1.0.0"
+            operations: [
+                TestOperation
+            ]
+            errors: [
+                MyCustomValidationException
+            ]
+        }
+
+        @http(method: "POST", uri: "/test")
+        operation TestOperation {
+            input: TestInput
+        }
+
+        structure TestInput {
+            @required
+            @length(min: 1, max: 10)
+            name: String
+        }
+
+        @error("client")
+        @httpError(400)
+        @validationException
+        structure MyCustomValidationException {
+            @validationMessage
+            message: String
+
+            @validationExceptionMemberDefault("fieldValidationFailed")
+            reason: ValidationExceptionReason
+        }
+
+        @enum([
+            { value: "fieldValidationFailed", name: "FIELD_VALIDATION_FAILED" },
+            { value: "other", name: "OTHER" }
+        ])
+        string ValidationExceptionReason
+        """.asSmithyModel(smithyVersion = "2.0")
+
+    @Test
+    fun `code compiles with validationExceptionMemberDefault on optional additional field`() {
+        val generatedServers = serverIntegrationTest(modelWithOptionalValidationExceptionMemberDefault, testCoverage = HttpTestType.Default)
+        val generatedInput = generatedServers.single().path.resolve("src/input.rs").toFile().readText()
+        generatedInput shouldContain "reason: Some(crate::model::ValidationExceptionReason::FieldValidationFailed)"
+    }
 }
