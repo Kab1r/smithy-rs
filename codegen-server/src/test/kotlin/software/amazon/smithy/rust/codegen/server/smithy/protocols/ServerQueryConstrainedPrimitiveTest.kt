@@ -42,6 +42,9 @@ class ServerQueryConstrainedPrimitiveTest {
         structure ConstrainedPrimitiveInputInput {
             durationSeconds: DurationSecondsType,
             name: NameType,
+            labels: LabelList,
+            uniqueLabels: UniqueLabelList,
+            attributes: AttributeMap,
         }
 
         structure ConstrainedPrimitiveInputOutput {}
@@ -68,6 +71,28 @@ class ServerQueryConstrainedPrimitiveTest {
 
         @pattern("^[A-Za-z0-9]+${'$'}")
         string NameType
+
+        @length(min: 1, max: 2)
+        list LabelList {
+            member: LabelValue
+        }
+
+        @uniqueItems
+        list UniqueLabelList {
+            member: LabelValue
+        }
+
+        @length(min: 1, max: 2)
+        map AttributeMap {
+            key: AttributeKey,
+            value: LabelValue,
+        }
+
+        @pattern("^[A-Za-z0-9]+${'$'}")
+        string AttributeKey
+
+        @pattern("^[A-Za-z0-9]+${'$'}")
+        string LabelValue
         """.asSmithyModel(smithyVersion = "2")
 
     @Test
@@ -90,6 +115,10 @@ class ServerQueryConstrainedPrimitiveTest {
                         let name = input.name.expect("name should be set");
                         assert_eq!(name.as_str(), "example");
 
+                        assert!(input.labels.is_some(), "labels should be set");
+                        assert!(input.unique_labels.is_some(), "unique_labels should be set");
+                        assert!(input.attributes.is_some(), "attributes should be set");
+
                         Ok(crate::output::ConstrainedPrimitiveInputOutput {})
                     }
 
@@ -105,7 +134,7 @@ class ServerQueryConstrainedPrimitiveTest {
                             .constrained_primitive_input(constrained_input_handler)
                             .build_unchecked();
 
-                        let request_body = b"Action=ConstrainedPrimitiveInput&Version=2020-01-08&durationSeconds=3600&name=example".to_vec();
+                        let request_body = b"Action=ConstrainedPrimitiveInput&Version=2020-01-08&durationSeconds=3600&name=example&labels.member.1=alpha&labels.member.2=beta&uniqueLabels.member.1=alpha&uniqueLabels.member.2=beta&attributes.entry.1.key=first&attributes.entry.1.value=alpha".to_vec();
                         let request = #{Http}::Request::builder()
                             .uri("/")
                             .method("POST")
@@ -132,6 +161,58 @@ class ServerQueryConstrainedPrimitiveTest {
                             .build_unchecked();
 
                         let request_body = b"Action=ConstrainedPrimitiveInput&Version=2020-01-08&durationSeconds=0&name=example".to_vec();
+                        let request = #{Http}::Request::builder()
+                            .uri("/")
+                            .method("POST")
+                            .header("content-type", "application/x-www-form-urlencoded")
+                            .body(#{CreateBody:W})
+                            .expect("failed to build request");
+
+                        let response = #{Tower}::ServiceExt::oneshot(service, request)
+                            .await
+                            .expect("failed to call service");
+                        assert_eq!(response.status(), #{Http}::StatusCode::BAD_REQUEST);
+                        """,
+                        *codegenScope,
+                        "CreateBody" to ServerHttpTestHelpers.createBodyFromBytes(codegenContext, "request_body"),
+                    )
+                }
+
+                tokioTest("invalid_query_constrained_list_rejects_as_validation") {
+                    rustTemplate(
+                        """
+                        let config = crate::QueryConstrainedConfig::builder().build();
+                        let service = crate::QueryConstrained::builder(config)
+                            .constrained_primitive_input(constrained_input_handler)
+                            .build_unchecked();
+
+                        let request_body = b"Action=ConstrainedPrimitiveInput&Version=2020-01-08&durationSeconds=3600&labels.member.1=alpha&labels.member.2=beta&labels.member.3=gamma".to_vec();
+                        let request = #{Http}::Request::builder()
+                            .uri("/")
+                            .method("POST")
+                            .header("content-type", "application/x-www-form-urlencoded")
+                            .body(#{CreateBody:W})
+                            .expect("failed to build request");
+
+                        let response = #{Tower}::ServiceExt::oneshot(service, request)
+                            .await
+                            .expect("failed to call service");
+                        assert_eq!(response.status(), #{Http}::StatusCode::BAD_REQUEST);
+                        """,
+                        *codegenScope,
+                        "CreateBody" to ServerHttpTestHelpers.createBodyFromBytes(codegenContext, "request_body"),
+                    )
+                }
+
+                tokioTest("invalid_query_constrained_unique_list_rejects_as_validation") {
+                    rustTemplate(
+                        """
+                        let config = crate::QueryConstrainedConfig::builder().build();
+                        let service = crate::QueryConstrained::builder(config)
+                            .constrained_primitive_input(constrained_input_handler)
+                            .build_unchecked();
+
+                        let request_body = b"Action=ConstrainedPrimitiveInput&Version=2020-01-08&durationSeconds=3600&uniqueLabels.member.1=alpha&uniqueLabels.member.2=alpha".to_vec();
                         let request = #{Http}::Request::builder()
                             .uri("/")
                             .method("POST")

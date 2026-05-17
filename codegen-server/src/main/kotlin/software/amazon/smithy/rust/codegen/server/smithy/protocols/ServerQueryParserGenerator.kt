@@ -387,6 +387,7 @@ abstract class ServerQueryParserGenerator(
 
     private fun collectionParser(shape: CollectionShape): RuntimeType =
         protocolFunctions.deserializeFn(shape, fnNameSuffix = "query") { fnName ->
+            val returnSymbolToParse = returnSymbolToParse(shape)
             rustBlockTemplate(
                 """
                 pub(crate) fn $fnName(
@@ -398,7 +399,7 @@ abstract class ServerQueryParserGenerator(
                 ) -> #{Result}<#{Option}<#{Collection}>, #{RequestRejection}>
                 """,
                 *codegenScope,
-                "Collection" to symbolProvider.toSymbol(shape),
+                "Collection" to returnSymbolToParse.symbol,
             ) {
                 rustTemplate(
                     """
@@ -434,20 +435,34 @@ abstract class ServerQueryParserGenerator(
                         )
                     }
                 }
-                rust(
-                    """
-                    if found || has_empty_marker {
-                        Ok(Some(out))
-                    } else {
-                        Ok(None)
-                    }
-                    """,
-                )
+                if (returnSymbolToParse.isUnconstrained) {
+                    rust(
+                        """
+                        if found || has_empty_marker {
+                            Ok(Some(#T(out)))
+                        } else {
+                            Ok(None)
+                        }
+                        """,
+                        returnSymbolToParse.symbol,
+                    )
+                } else {
+                    rust(
+                        """
+                        if found || has_empty_marker {
+                            Ok(Some(out))
+                        } else {
+                            Ok(None)
+                        }
+                        """,
+                    )
+                }
             }
         }
 
     private fun mapParser(shape: MapShape): RuntimeType =
         protocolFunctions.deserializeFn(shape, fnNameSuffix = "query") { fnName ->
+            val returnSymbolToParse = returnSymbolToParse(shape)
             rustBlockTemplate(
                 """
                 pub(crate) fn $fnName(
@@ -459,7 +474,7 @@ abstract class ServerQueryParserGenerator(
                 ) -> #{Result}<#{Option}<#{Map}>, #{RequestRejection}>
                 """,
                 *codegenScope,
-                "Map" to symbolProvider.toSymbol(shape),
+                "Map" to returnSymbolToParse.symbol,
             ) {
                 rustTemplate(
                     """
@@ -519,15 +534,28 @@ abstract class ServerQueryParserGenerator(
                         *codegenScope,
                     )
                 }
-                rust(
-                    """
-                    if found {
-                        Ok(Some(out))
-                    } else {
-                        Ok(None)
-                    }
-                    """,
-                )
+                if (returnSymbolToParse.isUnconstrained) {
+                    rust(
+                        """
+                        if found {
+                            Ok(Some(#T(out)))
+                        } else {
+                            Ok(None)
+                        }
+                        """,
+                        returnSymbolToParse.symbol,
+                    )
+                } else {
+                    rust(
+                        """
+                        if found {
+                            Ok(Some(out))
+                        } else {
+                            Ok(None)
+                        }
+                        """,
+                    )
+                }
             }
         }
 
