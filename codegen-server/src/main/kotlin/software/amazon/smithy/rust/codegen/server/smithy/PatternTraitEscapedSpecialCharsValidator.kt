@@ -30,11 +30,11 @@ class PatternTraitEscapedSpecialCharsValidator : AbstractValidator() {
                 model.getMemberShapesWithTrait(PatternTrait::class.java)
         return shapes
             .filter { shape -> checkMisuse(shape) }
-            .map { shape -> makeError(shape) }
+            .map { shape -> makeDanger(shape) }
             .toList()
     }
 
-    private fun makeError(shape: Shape): ValidationEvent {
+    private fun makeDanger(shape: Shape): ValidationEvent {
         val pattern = shape.expectTrait<PatternTrait>()
         val replacement =
             pattern.pattern.toString()
@@ -47,7 +47,7 @@ class PatternTraitEscapedSpecialCharsValidator : AbstractValidator() {
             You must escape them: `@pattern($replacement)`.
             See https://github.com/smithy-lang/smithy-rs/issues/2508 for more details.
             """.trimIndent()
-        return error(shape, pattern, message)
+        return danger(shape, pattern, message)
     }
 
     private fun checkMisuse(shape: Shape): Boolean {

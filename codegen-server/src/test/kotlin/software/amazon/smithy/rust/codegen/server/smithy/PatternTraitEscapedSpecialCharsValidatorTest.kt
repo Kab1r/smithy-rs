@@ -5,30 +5,30 @@
 
 package software.amazon.smithy.rust.codegen.server.smithy
 
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import software.amazon.smithy.model.Model
 import software.amazon.smithy.model.shapes.ShapeId
 import software.amazon.smithy.model.validation.Severity
-import software.amazon.smithy.model.validation.ValidatedResultException
+import software.amazon.smithy.model.validation.ValidationEvent
 import software.amazon.smithy.rust.codegen.core.testutil.asSmithyModel
 
 class PatternTraitEscapedSpecialCharsValidatorTest {
     @Test
-    fun `should error out with a suggestion if non-escaped special chars used inside @pattern`() {
-        val exception =
-            shouldThrow<ValidatedResultException> {
+    fun `should warn with a suggestion if non-escaped special chars used inside @pattern`() {
+        val events =
+            patternEvents(
                 """
                 namespace test
 
                 @pattern("\t")
                 string MyString
-                """.asSmithyModel(smithyVersion = "2")
-            }
-        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+                """,
+            )
 
         events shouldHaveSize 1
+        events[0].severity shouldBe Severity.DANGER
         events[0].shapeId.get() shouldBe ShapeId.from("test#MyString")
         events[0].message shouldBe
             """
@@ -40,18 +40,18 @@ class PatternTraitEscapedSpecialCharsValidatorTest {
 
     @Test
     fun `should suggest escaping spacial characters properly`() {
-        val exception =
-            shouldThrow<ValidatedResultException> {
+        val events =
+            patternEvents(
                 """
                 namespace test
 
                 @pattern("[.\n\\r]+")
                 string MyString
-                """.asSmithyModel(smithyVersion = "2")
-            }
-        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+                """,
+            )
 
         events shouldHaveSize 1
+        events[0].severity shouldBe Severity.DANGER
         events[0].shapeId.get() shouldBe ShapeId.from("test#MyString")
         events[0].message shouldBe
             """
@@ -63,8 +63,8 @@ class PatternTraitEscapedSpecialCharsValidatorTest {
 
     @Test
     fun `should report all non-escaped special characters`() {
-        val exception =
-            shouldThrow<ValidatedResultException> {
+        val events =
+            patternEvents(
                 """
                 namespace test
 
@@ -79,16 +79,17 @@ class PatternTraitEscapedSpecialCharsValidatorTest {
 
                 @pattern("^[\r\t]$")
                 string MyString4
-                """.asSmithyModel(smithyVersion = "2")
-            }
-        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+                """,
+            )
+
         events shouldHaveSize 4
+        events.forEach { it.severity shouldBe Severity.DANGER }
     }
 
     @Test
-    fun `should report errors on string members`() {
-        val exception =
-            shouldThrow<ValidatedResultException> {
+    fun `should report warnings on string members`() {
+        val events =
+            patternEvents(
                 """
                 namespace test
 
@@ -99,13 +100,36 @@ class PatternTraitEscapedSpecialCharsValidatorTest {
                     @pattern("\b")
                     field: String
                 }
-                """.asSmithyModel(smithyVersion = "2")
-            }
-        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+                """,
+            )
 
         events shouldHaveSize 2
+        events.forEach { it.severity shouldBe Severity.DANGER }
         events[0].shapeId.get() shouldBe ShapeId.from("test#MyString")
         events[1].shapeId.get() shouldBe ShapeId.from("test#MyStructure\$field")
+    }
+
+    @Test
+    fun `should be suppressible with metadata suppressions`() {
+        val events =
+            patternEvents(
+                """
+                metadata suppressions = [
+                    {
+                        id: "PatternTraitEscapedSpecialChars",
+                        namespace: "test",
+                        reason: "Accepted for compatibility with existing models."
+                    }
+                ]
+
+                namespace test
+
+                @pattern("\t")
+                string MyString
+                """,
+            )
+
+        events shouldHaveSize 0
     }
 
     @Test
@@ -125,5 +149,20 @@ class PatternTraitEscapedSpecialCharsValidatorTest {
         @pattern("\\w+")
         string MyString4
         """.asSmithyModel(smithyVersion = "2")
+    }
+
+    private fun patternEvents(model: String): List<ValidationEvent> {
+        val processed =
+            if (model.trimStart().startsWith("\$version")) {
+                model
+            } else {
+                "\$version: \"2\"\n$model"
+            }
+        return Model.assembler()
+            .discoverModels()
+            .addUnparsedModel("test.smithy", processed)
+            .assemble()
+            .validationEvents
+            .filter { it.id == "PatternTraitEscapedSpecialChars" && !it.suppressionReason.isPresent }
     }
 }
