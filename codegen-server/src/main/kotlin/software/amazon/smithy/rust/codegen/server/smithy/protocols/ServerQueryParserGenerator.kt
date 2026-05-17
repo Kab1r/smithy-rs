@@ -271,7 +271,7 @@ abstract class ServerQueryParserGenerator(
                 rustTemplate(
                     "<#{Shape} as #{SmithyTypes}::primitive::Parse>::parse_smithy_primitive($valueExpression).map_err(#{RequestRejection}::PrimitiveParse)",
                     *codegenScope,
-                    "Shape" to symbolProvider.toSymbol(target),
+                    "Shape" to codegenContext.unconstrainedShapeSymbolProvider.toSymbol(target),
                 )
             is TimestampShape -> {
                 val timestampFormat =

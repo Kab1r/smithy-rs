@@ -351,7 +351,8 @@ class XmlBindingTraitSerializerGenerator(
         member: MemberShape,
         input: String,
     ) {
-        when (model.expectShape(member.target)) {
+        val target = model.expectShape(member.target)
+        when (target) {
             is StringShape -> {
                 // The `input` expression always evaluates to a reference type at this point, but if
                 // it does so because
@@ -368,8 +369,14 @@ class XmlBindingTraitSerializerGenerator(
                 rust("$input.as_ref()")
             }
             is BooleanShape, is NumberShape -> {
+                val valueExpression =
+                    if (target is NumberShape && symbolProvider.toSymbol(target).rustType() is RustType.Opaque) {
+                        "*${referencedConstrainedValue(input)}.inner()"
+                    } else {
+                        autoDeref(input)
+                    }
                 rust(
-                    "#T::from(${autoDeref(input)}).encode()",
+                    "#T::from($valueExpression).encode()",
                     RuntimeType.smithyTypes(runtimeConfig).resolve("primitive::Encoder"),
                 )
             }
@@ -394,6 +401,13 @@ class XmlBindingTraitSerializerGenerator(
             else -> TODO(member.toString())
         }
     }
+
+    private fun referencedConstrainedValue(input: String): String =
+        if (input.startsWith("&")) {
+            autoDeref(input)
+        } else {
+            input
+        }
 
     @Suppress("NAME_SHADOWING")
     private fun RustWriter.serializeMember(

@@ -118,8 +118,20 @@ val commonCodegenTests = "../codegen-core/common-test-models".let { commonModels
             extraCodegenConfig = """"debugMode": true""",
         ),
         CodegenTest(
+            "aws.protocoltests.query.constrained#AwsQueryConstrained",
+            "aws_query_constrained",
+            imports = listOf("$commonModels/query-constrained-primitives.smithy"),
+            extraCodegenConfig = """"debugMode": true""",
+        ),
+        CodegenTest(
             "aws.protocoltests.ec2#AwsEc2",
             "ec2_query",
+            extraCodegenConfig = """"debugMode": true""",
+        ),
+        CodegenTest(
+            "aws.protocoltests.query.constrained#Ec2QueryConstrained",
+            "ec2_query_constrained",
+            imports = listOf("$commonModels/query-constrained-primitives.smithy"),
             extraCodegenConfig = """"debugMode": true""",
         ),
         CodegenTest(
