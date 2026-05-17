@@ -7,6 +7,7 @@ package software.amazon.smithy.rust.codegen.server.smithy.customizations
 
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import software.amazon.smithy.model.shapes.OperationShape
 import software.amazon.smithy.model.shapes.ServiceShape
@@ -21,6 +22,7 @@ import software.amazon.smithy.rust.codegen.server.smithy.testutil.serverIntegrat
  */
 internal class AddValidationExceptionToConstrainedOperationsTest {
     private val validationExceptionShapeId = SmithyValidationExceptionConversionGenerator.SHAPE_ID
+    private val customValidationExceptionShapeId = ShapeId.from("test#CustomValidationException")
 
     private val testModelWithValidationExceptionImported =
         """
@@ -113,8 +115,11 @@ internal class AddValidationExceptionToConstrainedOperationsTest {
 
         @restJson1
         service ConstrainedService {
-            operations: [SampleOperation]
-            errors: [CustomValidationException]
+            operations: [
+                SampleOperation,
+                SampleOperationWithCustomValidationException,
+                UnconstrainedOperation,
+            ]
         }
 
         @http(uri: "/sample", method: "POST")
@@ -123,9 +128,26 @@ internal class AddValidationExceptionToConstrainedOperationsTest {
             output: SampleOutput
         }
 
+        @http(uri: "/sample-with-custom-validation", method: "POST")
+        operation SampleOperationWithCustomValidationException {
+            input: SampleInput
+            output: SampleOutput
+            errors: [CustomValidationException]
+        }
+
+        @http(uri: "/unconstrained", method: "POST")
+        operation UnconstrainedOperation {
+            input: UnconstrainedInput
+            output: SampleOutput
+        }
+
         structure SampleInput {
             @range(min: 0, max: 100)
             constrainedInteger: Integer
+        }
+
+        structure UnconstrainedInput {
+            value: String
         }
 
         structure SampleOutput {
@@ -151,30 +173,63 @@ internal class AddValidationExceptionToConstrainedOperationsTest {
         """.asSmithyModel(smithyVersion = "2")
 
     @Test
-    fun `when custom validation exception exists, ValidationException is not automatically added`() {
-        // Verify the operation doesn't have ValidationException in the original model
+    fun `when custom validation exception exists, constrained operations get custom validation exception attached`() {
+        // Verify the operation doesn't have a validation exception in the original model.
         val operation =
             testModelWithCustomValidationException.expectShape(
                 ShapeId.from("test#SampleOperation"),
                 OperationShape::class.java,
             )
         operation.errors.contains(validationExceptionShapeId).shouldBeFalse()
+        operation.errors.contains(customValidationExceptionShapeId).shouldBeFalse()
 
-        // The model has a custom validation exception, so the transformer should NOT add
-        // `smithy.framework#ValidationException`.
         serverIntegrationTest(
             testModelWithCustomValidationException,
             IntegrationTestParams(),
             testCoverage = HttpTestType.Default,
         ) { codegenContext, _ ->
-            // Verify the transformed model still doesn't have `smithy.framework#ValidationException`
-            // on the operation.
             val transformedOperation =
                 codegenContext.model.expectShape(
                     ShapeId.from("test#SampleOperation"),
                     OperationShape::class.java,
                 )
             transformedOperation.errors.contains(validationExceptionShapeId).shouldBeFalse()
+            transformedOperation.errors.contains(customValidationExceptionShapeId).shouldBeTrue()
+        }
+    }
+
+    @Test
+    fun `operation that already lists custom validation exception is unchanged`() {
+        val operationShapeId = ShapeId.from("test#SampleOperationWithCustomValidationException")
+        val operation =
+            testModelWithCustomValidationException.expectShape(operationShapeId, OperationShape::class.java)
+        operation.errors.count { it == customValidationExceptionShapeId } shouldBe 1
+
+        serverIntegrationTest(
+            testModelWithCustomValidationException,
+            IntegrationTestParams(),
+            testCoverage = HttpTestType.Default,
+        ) { codegenContext, _ ->
+            val transformedOperation = codegenContext.model.expectShape(operationShapeId, OperationShape::class.java)
+            transformedOperation.errors.count { it == customValidationExceptionShapeId } shouldBe 1
+            transformedOperation.errors.contains(validationExceptionShapeId).shouldBeFalse()
+        }
+    }
+
+    @Test
+    fun `operation without constrained input does not get validation exception attached`() {
+        val operationShapeId = ShapeId.from("test#UnconstrainedOperation")
+        val operation =
+            testModelWithCustomValidationException.expectShape(operationShapeId, OperationShape::class.java)
+        operation.errors.isEmpty().shouldBeTrue()
+
+        serverIntegrationTest(
+            testModelWithCustomValidationException,
+            IntegrationTestParams(),
+            testCoverage = HttpTestType.Default,
+        ) { codegenContext, _ ->
+            val transformedOperation = codegenContext.model.expectShape(operationShapeId, OperationShape::class.java)
+            transformedOperation.errors.isEmpty().shouldBeTrue()
         }
     }
 
