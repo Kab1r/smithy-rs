@@ -28,7 +28,7 @@ class PatternTraitEscapedSpecialCharsValidatorTest {
             )
 
         events shouldHaveSize 1
-        events[0].severity shouldBe Severity.DANGER
+        events[0].severity shouldBe Severity.WARNING
         events[0].shapeId.get() shouldBe ShapeId.from("test#MyString")
         events[0].message shouldBe
             """
@@ -51,7 +51,7 @@ class PatternTraitEscapedSpecialCharsValidatorTest {
             )
 
         events shouldHaveSize 1
-        events[0].severity shouldBe Severity.DANGER
+        events[0].severity shouldBe Severity.WARNING
         events[0].shapeId.get() shouldBe ShapeId.from("test#MyString")
         events[0].message shouldBe
             """
@@ -83,7 +83,7 @@ class PatternTraitEscapedSpecialCharsValidatorTest {
             )
 
         events shouldHaveSize 4
-        events.forEach { it.severity shouldBe Severity.DANGER }
+        events.forEach { it.severity shouldBe Severity.WARNING }
     }
 
     @Test
@@ -104,7 +104,7 @@ class PatternTraitEscapedSpecialCharsValidatorTest {
             )
 
         events shouldHaveSize 2
-        events.forEach { it.severity shouldBe Severity.DANGER }
+        events.forEach { it.severity shouldBe Severity.WARNING }
         events[0].shapeId.get() shouldBe ShapeId.from("test#MyString")
         events[1].shapeId.get() shouldBe ShapeId.from("test#MyStructure\$field")
     }
@@ -149,6 +149,38 @@ class PatternTraitEscapedSpecialCharsValidatorTest {
         @pattern("\\w+")
         string MyString4
         """.asSmithyModel(smithyVersion = "2")
+    }
+
+    @Test
+    fun `should not abort model assembly when the misuse pattern is present`() {
+        // smithy-build aborts a projection on any event with severity ERROR or DANGER. WARNING is the
+        // highest level it treats as non-fatal, so loading a service whose model contains the misuse
+        // pattern must succeed (Model.assembler().assemble().unwrap()) and surface exactly one WARNING
+        // event tagged with the shape ID.
+        val model =
+            """
+            ${'$'}version: "2"
+
+            namespace test
+
+            @pattern("\t")
+            string MyString
+            """
+        val result =
+            Model.assembler()
+                .discoverModels()
+                .addUnparsedModel("test.smithy", model)
+                .assemble()
+
+        // unwrap() throws on ERROR/DANGER; reaching this line proves the misuse is non-fatal.
+        result.unwrap()
+
+        val events =
+            result.validationEvents
+                .filter { it.id == "PatternTraitEscapedSpecialChars" && !it.suppressionReason.isPresent }
+        events shouldHaveSize 1
+        events[0].severity shouldBe Severity.WARNING
+        events[0].shapeId.get() shouldBe ShapeId.from("test#MyString")
     }
 
     private fun patternEvents(model: String): List<ValidationEvent> {

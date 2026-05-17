@@ -30,11 +30,15 @@ class PatternTraitEscapedSpecialCharsValidator : AbstractValidator() {
                 model.getMemberShapesWithTrait(PatternTrait::class.java)
         return shapes
             .filter { shape -> checkMisuse(shape) }
-            .map { shape -> makeDanger(shape) }
+            .map { shape -> makeWarning(shape) }
             .toList()
     }
 
-    private fun makeDanger(shape: Shape): ValidationEvent {
+    // smithy-build's ProjectionResult.isBroken() treats ERROR and DANGER as equally fatal, so emitting
+    // DANGER here aborts codegen for any AWS model that contains the misuse. WARNING is the highest
+    // severity smithy-build's projection runner treats as non-fatal, which matches the validator's
+    // advisory purpose.
+    private fun makeWarning(shape: Shape): ValidationEvent {
         val pattern = shape.expectTrait<PatternTrait>()
         val replacement =
             pattern.pattern.toString()
@@ -47,7 +51,7 @@ class PatternTraitEscapedSpecialCharsValidator : AbstractValidator() {
             You must escape them: `@pattern($replacement)`.
             See https://github.com/smithy-lang/smithy-rs/issues/2508 for more details.
             """.trimIndent()
-        return danger(shape, pattern, message)
+        return warning(shape, pattern, message)
     }
 
     private fun checkMisuse(shape: Shape): Boolean {
