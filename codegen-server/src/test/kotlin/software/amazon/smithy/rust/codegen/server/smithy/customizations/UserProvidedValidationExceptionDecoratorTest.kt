@@ -632,10 +632,11 @@ internal class UserProvidedValidationExceptionDecoratorTest {
             reason: ValidationExceptionReason
         }
 
-        enum ValidationExceptionReason {
-            FIELD_VALIDATION_FAILED = "fieldValidationFailed"
-            OTHER = "other"
-        }
+        @enum([
+            { value: "fieldValidationFailed", name: "FIELD_VALIDATION_FAILED" },
+            { value: "other", name: "OTHER" }
+        ])
+        string ValidationExceptionReason
         """.asSmithyModel(smithyVersion = "2.0")
 
     @Test

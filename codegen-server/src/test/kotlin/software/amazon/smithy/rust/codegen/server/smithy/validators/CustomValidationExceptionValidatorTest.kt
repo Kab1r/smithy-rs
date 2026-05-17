@@ -270,10 +270,11 @@ class CustomValidationExceptionValidatorTest {
             reason: ValidationExceptionReason
         }
 
-        enum ValidationExceptionReason {
-            FIELD_VALIDATION_FAILED = "fieldValidationFailed"
-            OTHER = "other"
-        }
+        @enum([
+            { value: "fieldValidationFailed", name: "FIELD_VALIDATION_FAILED" },
+            { value: "other", name: "OTHER" }
+        ])
+        string ValidationExceptionReason
         """.asSmithyModel(smithyVersion = "2").also { model ->
             val reason = model.expectShape(ShapeId.from("test#ValidationError${'$'}reason"))
             reason.hasTrait(software.amazon.smithy.framework.rust.ValidationExceptionMemberDefaultTrait.ID) shouldBe true
@@ -298,10 +299,11 @@ class CustomValidationExceptionValidatorTest {
                     reason: ValidationExceptionReason
                 }
 
-                enum ValidationExceptionReason {
-                    FIELD_VALIDATION_FAILED = "fieldValidationFailed"
-                    OTHER = "other"
-                }
+                @enum([
+                    { value: "fieldValidationFailed", name: "FIELD_VALIDATION_FAILED" },
+                    { value: "other", name: "OTHER" }
+                ])
+                string ValidationExceptionReason
                 """.asSmithyModel(smithyVersion = "2")
             }
 

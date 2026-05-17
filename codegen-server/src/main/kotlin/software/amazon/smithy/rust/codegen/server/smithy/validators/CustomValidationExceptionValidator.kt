@@ -13,11 +13,13 @@ import software.amazon.smithy.model.shapes.Shape
 import software.amazon.smithy.model.shapes.ShapeType
 import software.amazon.smithy.model.shapes.StructureShape
 import software.amazon.smithy.model.traits.DefaultTrait
+import software.amazon.smithy.model.traits.EnumTrait
 import software.amazon.smithy.model.traits.EnumValueTrait
 import software.amazon.smithy.model.traits.ErrorTrait
 import software.amazon.smithy.model.validation.AbstractValidator
 import software.amazon.smithy.model.validation.Severity
 import software.amazon.smithy.model.validation.ValidationEvent
+import software.amazon.smithy.rust.codegen.core.util.expectTrait
 import software.amazon.smithy.rust.codegen.core.util.hasTrait
 import software.amazon.smithy.rust.codegen.core.util.targetOrSelf
 import software.amazon.smithy.rust.codegen.server.smithy.canReachConstrainedShapeForValidation
@@ -142,11 +144,17 @@ class CustomValidationExceptionValidator : AbstractValidator() {
                 target.isEnumShape -> {
                     val enumShape = target.asEnumShape().get()
                     enumShape.members().any { enumMember ->
-                        enumMember.getTrait(EnumValueTrait::class.java)
-                            .map { it.stringValue.orElse(enumMember.memberName) }
-                            .orElse(enumMember.memberName) == value
+                        enumMember.memberName == value ||
+                            enumMember.getTrait(EnumValueTrait::class.java)
+                                .map { it.stringValue.orElse(enumMember.memberName) }
+                                .orElse(enumMember.memberName) == value
                     }
                 }
+
+                target.hasTrait<EnumTrait>() ->
+                    target.expectTrait<EnumTrait>().values.any { enumDefinition ->
+                        enumDefinition.value == value || enumDefinition.name.orElse(null) == value
+                    }
 
                 else -> true
             }

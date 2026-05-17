@@ -23,6 +23,7 @@ import software.amazon.smithy.model.shapes.ShapeId
 import software.amazon.smithy.model.shapes.StringShape
 import software.amazon.smithy.model.shapes.StructureShape
 import software.amazon.smithy.model.traits.EnumTrait
+import software.amazon.smithy.model.traits.EnumValueTrait
 import software.amazon.smithy.model.traits.LengthTrait
 import software.amazon.smithy.model.traits.PatternTrait
 import software.amazon.smithy.rust.codegen.core.rustlang.Writable
@@ -36,8 +37,11 @@ import software.amazon.smithy.rust.codegen.core.smithy.RuntimeType.Companion.pre
 import software.amazon.smithy.rust.codegen.core.smithy.RustSymbolProvider
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.shapeModuleName
 import software.amazon.smithy.rust.codegen.core.util.dq
+import software.amazon.smithy.rust.codegen.core.util.expectTrait
 import software.amazon.smithy.rust.codegen.core.util.getTrait
+import software.amazon.smithy.rust.codegen.core.util.hasTrait
 import software.amazon.smithy.rust.codegen.core.util.targetShape
+import software.amazon.smithy.rust.codegen.core.util.toPascalCase
 import software.amazon.smithy.rust.codegen.core.util.toSnakeCase
 import software.amazon.smithy.rust.codegen.server.smithy.ServerCodegenContext
 import software.amazon.smithy.rust.codegen.server.smithy.ServerRustSettings
@@ -676,18 +680,21 @@ class UserProvidedValidationExceptionConversionGenerator(
                 ?: member.getTrait<software.amazon.smithy.model.traits.DefaultTrait>()?.toNode()
         return memberDefault?.let { node ->
             when {
-                targetShape.isEnumShape && node.isStringNode -> {
-                    val enumShape = targetShape.asEnumShape().get()
+                node.isStringNode && (targetShape.isEnumShape || targetShape.hasTrait<EnumTrait>()) -> {
                     val enumSymbol = codegenContext.symbolProvider.toSymbol(targetShape)
                     val enumValue = node.expectStringNode().value
-                    val enumMember =
-                        enumShape.members().find { enumMember ->
-                            enumMember.getTrait<software.amazon.smithy.model.traits.EnumValueTrait>()?.stringValue?.orElse(
-                                enumMember.memberName,
-                            ) == enumValue
-                        }
-                    val variantName = enumMember?.let { codegenContext.symbolProvider.toMemberName(it) } ?: enumValue
-                    "$enumSymbol::$variantName"
+                    val enumMemberName =
+                        if (targetShape.isEnumShape) {
+                            targetShape.asEnumShape().get().members().find { enumMember ->
+                                enumMember.memberName == enumValue ||
+                                    enumMember.getTrait<EnumValueTrait>()?.stringValue?.orElse(enumMember.memberName) == enumValue
+                            }?.let { codegenContext.symbolProvider.toMemberName(it) }
+                        } else {
+                            targetShape.expectTrait<EnumTrait>().values.find { enumDefinition ->
+                                enumDefinition.name.orElse(null) == enumValue || enumDefinition.value == enumValue
+                            }?.name?.map { it.toSnakeCase().toPascalCase() }?.orElse(enumValue)
+                        } ?: enumValue
+                    "$enumSymbol::$enumMemberName"
                 }
 
                 node.isStringNode ->
