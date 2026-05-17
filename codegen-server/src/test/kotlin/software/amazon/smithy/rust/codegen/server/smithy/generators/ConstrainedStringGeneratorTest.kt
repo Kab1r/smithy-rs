@@ -6,6 +6,7 @@
 package software.amazon.smithy.rust.codegen.server.smithy.generators
 
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtensionContext
@@ -264,6 +265,51 @@ class ConstrainedStringGeneratorTest {
             """.asSmithyModel(smithyVersion = "2")
 
         serverIntegrationTest(model, testCoverage = HttpTestType.Default)
+    }
+
+    @Test
+    fun `pattern containing a literal control character compiles`() {
+        // AWS service models occasionally embed bare control characters (CR / LF / TAB) inside
+        // @pattern character classes. Emitting those values through a raw Rust string literal
+        // (`r#"..."#`) trips rustc's lexer ("bare CR not allowed in raw string", a hard error
+        // since rustc 1.81 across all editions). The fix is to emit the pattern via a properly
+        // escaped non-raw string instead.
+        val model =
+            """
+            ${'$'}version: "2.0"
+
+            namespace test
+
+            use aws.protocols#restJson1
+
+            @restJson1
+            service TestService {
+                version: "2024-01-01"
+                operations: [Op]
+            }
+
+            @http(method: "POST", uri: "/op")
+            operation Op {
+                input: OpInput
+            }
+
+            structure OpInput {
+                @required
+                doc: ResourcePolicyDocument
+            }
+
+            // Mirrors the bedrock@ResourcePolicyDocument pattern: AWS models contain a literal control
+            // character inside the character class, not the two-character sequence backslash + r.
+            @pattern("^[__CR__ -~]+${'$'}")
+            string ResourcePolicyDocument
+            """
+                .replace("__CR__", "\r")
+                .asSmithyModel(smithyVersion = "2")
+
+        val generatedServers = serverIntegrationTest(model, testCoverage = HttpTestType.Default)
+        val generatedModel = generatedServers.single().path.resolve("src/model.rs").toFile().readText()
+        generatedModel shouldContain "::regex::Regex::new(\"^[\\n -~]+$\")"
+        generatedModel shouldNotContain "::regex::Regex::new(r#\""
     }
 
     @Test

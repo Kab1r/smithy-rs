@@ -5,6 +5,7 @@
 
 package software.amazon.smithy.rust.codegen.server.smithy.generators
 
+import software.amazon.smithy.codegen.core.CodegenException
 import software.amazon.smithy.codegen.core.Symbol
 import software.amazon.smithy.model.shapes.Shape
 import software.amazon.smithy.model.shapes.StringShape
@@ -20,6 +21,7 @@ import software.amazon.smithy.rust.codegen.core.rustlang.Writable
 import software.amazon.smithy.rust.codegen.core.rustlang.docs
 import software.amazon.smithy.rust.codegen.core.rustlang.documentShape
 import software.amazon.smithy.rust.codegen.core.rustlang.join
+import software.amazon.smithy.rust.codegen.core.rustlang.raw
 import software.amazon.smithy.rust.codegen.core.rustlang.render
 import software.amazon.smithy.rust.codegen.core.rustlang.rust
 import software.amazon.smithy.rust.codegen.core.rustlang.rustTemplate
@@ -48,6 +50,28 @@ import software.amazon.smithy.rust.codegen.server.smithy.validationErrorMessage
  * This type can be built from unconstrained values, yielding a `ConstraintViolation` when the input does not satisfy
  * the constraints.
  */
+private fun String.toRustStringLiteral(): String =
+    buildString {
+        append('"')
+        this@toRustStringLiteral.forEach { c ->
+            when (c) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\r' -> append("\\r")
+                '\n' -> append("\\n")
+                '\t' -> append("\\t")
+                else ->
+                    when {
+                        c.code < 0x20 || c.code == 0x7F -> append("\\u{").append(c.code.toString(16)).append('}')
+                        Character.isHighSurrogate(c) || Character.isLowSurrogate(c) ->
+                            throw CodegenException("pattern contains an unpaired UTF-16 surrogate")
+                        else -> append(c)
+                    }
+            }
+        }
+        append('"')
+    }
+
 class ConstrainedStringGenerator(
     val codegenContext: ServerCodegenContext,
     private val inlineModuleCreator: InlineModuleCreator,
@@ -316,11 +340,13 @@ data class Pattern(val symbol: Symbol, val patternTrait: PatternTrait, val isSen
 
     fun errorMessage(): Writable {
         return writable {
-            val pattern = patternTrait.pattern.toString().replace("#", "##")
-            rust(
+            val pattern = patternTrait.pattern.toString().toRustStringLiteral()
+            rustTemplate(
                 """
-                format!("${patternTrait.validationErrorMessage()}", &path, r##"$pattern"##)
+                format!(#{ErrorMessage}, &path, #{Pattern})
                 """,
+                "ErrorMessage" to writable { raw(patternTrait.validationErrorMessage().toRustStringLiteral()) },
+                "Pattern" to writable { raw(pattern) },
             )
         }
     }
@@ -333,9 +359,11 @@ data class Pattern(val symbol: Symbol, val patternTrait: PatternTrait, val isSen
         constraintViolation: Symbol,
         unconstrainedTypeName: String,
     ): Writable {
-        val pattern = patternTrait.pattern.toString().replace("#", "##")
+        val pattern = patternTrait.pattern.toString()
+        val patternLiteral = pattern.toRustStringLiteral()
         val errorMessageForUnsupportedRegex =
-            """The regular expression $pattern is not supported by the `regex` crate; feel free to file an issue under https://github.com/smithy-lang/smithy-rs/issues for support"""
+            "The regular expression $pattern is not supported by the `regex` crate; feel free to file an issue under https://github.com/smithy-lang/smithy-rs/issues for support"
+                .toRustStringLiteral()
 
         return {
             rustTemplate(
@@ -353,12 +381,14 @@ data class Pattern(val symbol: Symbol, val patternTrait: PatternTrait, val isSen
                 /// Attempts to compile the regex for this constrained type's `@pattern`.
                 /// This can fail if the specified regex is not supported by the `#{Regex}` crate.
                 pub fn compile_regex() -> &'static #{Regex}::Regex {
-                    static REGEX: std::sync::LazyLock<#{Regex}::Regex> = std::sync::LazyLock::new(|| #{Regex}::Regex::new(r##"$pattern"##).expect(r##"$errorMessageForUnsupportedRegex"##));
+                    static REGEX: std::sync::LazyLock<#{Regex}::Regex> = std::sync::LazyLock::new(|| #{Regex}::Regex::new(#{Pattern}).expect(#{ErrorMessageForUnsupportedRegex}));
 
                     &REGEX
                 }
                 """,
                 "Regex" to ServerCargoDependency.Regex.toType(),
+                "Pattern" to writable { raw(patternLiteral) },
+                "ErrorMessageForUnsupportedRegex" to writable { raw(errorMessageForUnsupportedRegex) },
                 *preludeScope,
             )
         }
@@ -366,15 +396,16 @@ data class Pattern(val symbol: Symbol, val patternTrait: PatternTrait, val isSen
 
     override fun shapeConstraintViolationDisplayMessage(shape: Shape) =
         writable {
-            val errorMessage =
-                patternTrait.shapeConstraintViolationDisplayMessage(shape).replace("#", "##")
-            val pattern = patternTrait.pattern.toString().replace("#", "##")
+            val errorMessage = patternTrait.shapeConstraintViolationDisplayMessage(shape).toRustStringLiteral()
+            val pattern = patternTrait.pattern.toString().toRustStringLiteral()
             rustTemplate(
                 """
                 Self::Pattern(_) => {
-                    format!(r##"$errorMessage"##, r##"$pattern"##)
+                    format!(#{ErrorMessage}, #{Pattern})
                 },
                 """,
+                "ErrorMessage" to writable { raw(errorMessage) },
+                "Pattern" to writable { raw(pattern) },
             )
         }
 }
