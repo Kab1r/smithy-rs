@@ -151,10 +151,17 @@ class XmlBindingTraitParserGenerator(
         check(shape is UnionShape || shape is StructureShape) {
             "payload parser should only be used on structures & unions"
         }
+        // The inner `parseStructure` / `parseUnion` resolve their return type through
+        // `returnSymbolToParse`, which on server codegen for constrained-reachable shapes is the
+        // unconstrained builder rather than the constrained final shape. The wrapper that calls
+        // this helper (`shape_<op>_input.rs`) is also generated through `returnSymbolToParse`, so
+        // the two need to agree — otherwise the outer signature expects `Option<Builder>` while
+        // this helper still claims to return the constrained final shape.
+        val returnSymbol = returnSymbolToParse(shape).symbol
         return protocolFunctions.deserializeFn(member) { fnName ->
             rustBlock(
                 "pub fn $fnName(inp: &[u8]) -> std::result::Result<#1T, #2T>",
-                symbolProvider.toSymbol(shape),
+                returnSymbol,
                 xmlDecodeError,
             ) {
                 // for payloads, first look at the member trait

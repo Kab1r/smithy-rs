@@ -58,7 +58,7 @@ class NamingObstacleCourseTest {
             @restXml
             service RestXmlConstrained {
                 version: "2024-01-01"
-                operations: [ConstrainedInput]
+                operations: [ConstrainedInput, PayloadOp]
             }
 
             @http(uri: "/items", method: "POST")
@@ -97,6 +97,20 @@ class NamingObstacleCourseTest {
                 @required
                 count: ConstrainedCount
             }
+
+            @http(uri: "/payload", method: "POST")
+            operation PayloadOp {
+                input: PayloadOpInput
+                output: PayloadOpOutput
+                errors: [ValidationException]
+            }
+
+            structure PayloadOpInput {
+                @httpPayload
+                body: NestedHolder
+            }
+
+            structure PayloadOpOutput {}
 
             structure NestedHolder {
                 tag: ConstrainedTag
