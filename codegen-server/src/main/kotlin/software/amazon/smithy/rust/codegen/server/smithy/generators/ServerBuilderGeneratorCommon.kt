@@ -87,9 +87,15 @@ fun generateFallbackCodeToDefaultValue(
     val node = member.expectTrait<DefaultTrait>().toNode()!!
     val targetShape = model.expectShape(member.target)
 
+    // The fast path `.unwrap_or_default()` resolves through `<T as Default>::default()`, where `T` is the
+    // type of the modeled default value. Constrained list/map newtypes are wrapper tuple structs and
+    // intentionally do not implement `Default` — the empty inner would silently bypass the modeled
+    // constraints — so this shortcut is only valid when the target is not a public constrained wrapper.
+    val targetHasPublicConstrainedWrapper = targetShape.hasPublicConstrainedWrapperTupleType(model, publicConstrainedTypes)
     val useUnwrapOrDefault =
-        (targetShape is ListShape && node is ArrayNode && node.isEmpty) ||
-            (targetShape is MapShape && node is ObjectNode && node.isEmpty)
+        !targetHasPublicConstrainedWrapper &&
+            ((targetShape is ListShape && node is ArrayNode && node.isEmpty) ||
+                (targetShape is MapShape && node is ObjectNode && node.isEmpty))
 
     if (member.isStreaming(model) || useUnwrapOrDefault) {
         writer.rust(".unwrap_or_default()")

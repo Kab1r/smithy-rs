@@ -717,9 +717,32 @@ class UserProvidedValidationExceptionConversionGenerator(
                     )
                 node.isBooleanNode -> member.wrapValueIfOptional(node.expectBooleanNode().value.toString())
                 node.isNumberNode -> member.wrapValueIfOptional(node.expectNumberNode().value.toString())
-                else -> "Default::default()"
+                else -> member.fallbackDefault()
             }
-        } ?: "Default::default()"
+        } ?: member.fallbackDefault()
+    }
+
+    /**
+     * The fallback assignment used when no explicit default value can be derived from the model. For an
+     * optional field, `Default::default()` resolves to `None`, which is always safe. For a required field
+     * whose target is a constrained wrapper tuple newtype (e.g. a list with `@uniqueItems`), `Default` is
+     * intentionally not implemented on the wrapper because the empty inner would silently bypass the
+     * modeled constraints. Construct the wrapper directly with an unconstrained default inner instead;
+     * the resulting value is only used as a placeholder when synthesising the validation exception, and
+     * its constraints will be enforced by the normal validation paths before user code observes it.
+     */
+    private fun MemberShape.fallbackDefault(): String {
+        if (codegenContext.symbolProvider.toSymbol(this).isOptional()) {
+            return "Default::default()"
+        }
+        val target = this.targetShape(codegenContext.model)
+        val publicConstrainedTypes = codegenContext.settings.codegenConfig.publicConstrainedTypes
+        return if (target.hasPublicConstrainedWrapperTupleType(codegenContext.model, publicConstrainedTypes)) {
+            val targetSymbol = codegenContext.symbolProvider.toSymbol(target)
+            "$targetSymbol(::std::default::Default::default())"
+        } else {
+            "Default::default()"
+        }
     }
 
     private fun MemberShape.wrapValueIfOptional(valueExpression: String): String =

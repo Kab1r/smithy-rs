@@ -934,4 +934,58 @@ internal class UserProvidedValidationExceptionDecoratorTest {
         generatedInput shouldContain "ValidationExceptionReason"
         generatedInput shouldContain "UnknownOperation"
     }
+
+    private val modelWithDefaultedConstrainedListAdditionalField =
+        """
+        namespace com.aws.example
+
+        use aws.protocols#restJson1
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationMessage
+
+        @restJson1
+        service CustomValidationExample {
+            version: "1.0.0"
+            operations: [
+                TestOperation
+            ]
+            errors: [
+                MyCustomValidationException
+            ]
+        }
+
+        @http(method: "POST", uri: "/test")
+        operation TestOperation {
+            input: TestInput
+        }
+
+        structure TestInput {
+            @required
+            @length(min: 1, max: 10)
+            name: String
+        }
+
+        @error("client")
+        @httpError(400)
+        @validationException
+        structure MyCustomValidationException {
+            @validationMessage
+            message: String
+
+            resources: Resources = []
+        }
+
+        // A constrained list whose constraints permit the empty-list `@default`. The constrained newtype
+        // does not implement `Default`, so the framework cannot fall back to `Default::default()` for the
+        // additional VE member — the codegen has to construct the wrapper directly.
+        @uniqueItems
+        list Resources {
+            member: String
+        }
+        """.asSmithyModel(smithyVersion = "2.0")
+
+    @Test
+    fun `code compiles with defaulted constrained-list additional field`() {
+        serverIntegrationTest(modelWithDefaultedConstrainedListAdditionalField, testCoverage = HttpTestType.Default)
+    }
 }
