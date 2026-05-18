@@ -684,18 +684,29 @@ class UserProvidedValidationExceptionConversionGenerator(
                 node.isStringNode && (targetShape.isEnumShape || targetShape.hasTrait<EnumTrait>()) -> {
                     val enumSymbol = codegenContext.symbolProvider.toSymbol(targetShape)
                     val enumValue = node.expectStringNode().value
-                    val enumMemberName =
-                        if (targetShape.isEnumShape) {
-                            targetShape.asEnumShape().get().members().find { enumMember ->
-                                enumMember.memberName == enumValue ||
-                                    enumMember.getTrait<EnumValueTrait>()?.stringValue?.orElse(enumMember.memberName) == enumValue
-                            }?.let { codegenContext.symbolProvider.toMemberName(it) }
-                        } else {
-                            targetShape.expectTrait<EnumTrait>().values.find { enumDefinition ->
-                                enumDefinition.name.orElse(null) == enumValue || enumDefinition.value == enumValue
-                            }?.name?.map { it.toSnakeCase().toPascalCase() }?.orElse(enumValue)
-                        } ?: enumValue
-                    member.wrapValueIfOptional("$enumSymbol::$enumMemberName")
+                    // Smithy 2.0 `enum` shapes always have names. Legacy `smithy.api#enum` may declare entries
+                    // with only a `value`; smithy-rs then emits a constrained-string newtype (with a
+                    // `TryFrom<&str>` impl) rather than a Rust `enum`, so `EnumSymbol::Variant` would refer to
+                    // a non-existent associated item. Route through `TryFrom<&str>` for the newtype case.
+                    val hasNamedVariants = targetShape.isEnumShape || targetShape.expectTrait<EnumTrait>().hasNames()
+                    if (hasNamedVariants) {
+                        val enumMemberName =
+                            if (targetShape.isEnumShape) {
+                                targetShape.asEnumShape().get().members().find { enumMember ->
+                                    enumMember.memberName == enumValue ||
+                                        enumMember.getTrait<EnumValueTrait>()?.stringValue?.orElse(enumMember.memberName) == enumValue
+                                }?.let { codegenContext.symbolProvider.toMemberName(it) }
+                            } else {
+                                targetShape.expectTrait<EnumTrait>().values.find { enumDefinition ->
+                                    enumDefinition.name.orElse(null) == enumValue || enumDefinition.value == enumValue
+                                }?.name?.map { it.toSnakeCase().toPascalCase() }?.orElse(enumValue)
+                            } ?: enumValue
+                        member.wrapValueIfOptional("$enumSymbol::$enumMemberName")
+                    } else {
+                        member.wrapValueIfOptional(
+                            """<$enumSymbol as ::std::convert::TryFrom<&str>>::try_from(${enumValue.dq()}).expect("framework-supplied default satisfies the enum constraint")""",
+                        )
+                    }
                 }
 
                 node.isStringNode ->

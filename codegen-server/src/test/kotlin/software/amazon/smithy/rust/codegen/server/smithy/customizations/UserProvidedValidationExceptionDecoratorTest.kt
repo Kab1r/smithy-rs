@@ -873,4 +873,65 @@ internal class UserProvidedValidationExceptionDecoratorTest {
         val occurrences = Regex("""pub struct ValidationExceptionField\b""").findAll(modelRs).count()
         occurrences shouldBe 1
     }
+
+    private val modelWithUnnamedLegacyEnumDefault =
+        """
+        namespace com.aws.example
+
+        use aws.protocols#restJson1
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationExceptionMemberDefault
+        use smithy.framework.rust#validationMessage
+
+        @restJson1
+        service CustomValidationExample {
+            version: "1.0.0"
+            operations: [
+                TestOperation
+            ]
+            errors: [
+                MyCustomValidationException
+            ]
+        }
+
+        @http(method: "POST", uri: "/test")
+        operation TestOperation {
+            input: TestInput
+        }
+
+        structure TestInput {
+            @required
+            @length(min: 1, max: 10)
+            name: String
+        }
+
+        @error("client")
+        @httpError(400)
+        @validationException
+        structure MyCustomValidationException {
+            @validationMessage
+            message: String
+
+            @required
+            @validationExceptionMemberDefault("UnknownOperation")
+            reason: ValidationExceptionReason
+        }
+
+        @enum([
+            { value: "UnknownOperation" },
+            { value: "CannotParse" },
+            { value: "Other" }
+        ])
+        string ValidationExceptionReason
+        """.asSmithyModel(smithyVersion = "2.0")
+
+    @Test
+    fun `code compiles with validationExceptionMemberDefault on legacy enum without names`() {
+        val generatedServers = serverIntegrationTest(modelWithUnnamedLegacyEnumDefault, testCoverage = HttpTestType.Default)
+        val generatedInput = generatedServers.single().path.resolve("src/input.rs").toFile().readText()
+        // The unnamed legacy enum is rendered as a constrained-string newtype, so the assignment must
+        // route through TryFrom<&str> rather than a non-existent `::UnknownOperation` associated item.
+        generatedInput shouldContain "ValidationExceptionReason"
+        generatedInput shouldContain "UnknownOperation"
+    }
 }
