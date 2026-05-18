@@ -71,6 +71,10 @@ class NamingObstacleCourseTest {
             structure ConstrainedInputInput {
                 count: ConstrainedCount
                 tag: ConstrainedTag
+                labels: ConstrainedLabels
+                attributes: ConstrainedAttributes
+                nested: NestedHolder
+                kind: ConstrainedKind
 
                 @httpHeader("X-Count")
                 headerCount: ConstrainedCount
@@ -90,11 +94,32 @@ class NamingObstacleCourseTest {
                 count: ConstrainedCount
             }
 
+            structure NestedHolder {
+                tag: ConstrainedTag
+            }
+
+            enum ConstrainedKind {
+                A
+                B
+                C
+            }
+
             @range(min: 1, max: 100)
             integer ConstrainedCount
 
             @pattern("^[A-Za-z0-9]+${'$'}")
             string ConstrainedTag
+
+            @length(min: 1, max: 4)
+            list ConstrainedLabels {
+                member: ConstrainedTag
+            }
+
+            @length(min: 1, max: 4)
+            map ConstrainedAttributes {
+                key: ConstrainedTag
+                value: ConstrainedTag
+            }
             """.asSmithyModel(smithyVersion = "2")
 
         serverIntegrationTest(model) { _, _ -> }
