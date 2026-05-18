@@ -25,6 +25,10 @@ import software.amazon.smithy.model.shapes.TimestampShape
 import software.amazon.smithy.model.shapes.UnionShape
 import software.amazon.smithy.model.traits.EnumTrait
 import software.amazon.smithy.model.traits.TimestampFormatTrait
+import software.amazon.smithy.rust.codegen.core.rustlang.RustType
+import software.amazon.smithy.rust.codegen.core.rustlang.render
+import software.amazon.smithy.rust.codegen.core.smithy.SimpleShapes
+import software.amazon.smithy.rust.codegen.core.smithy.rustType
 import software.amazon.smithy.model.traits.XmlFlattenedTrait
 import software.amazon.smithy.rust.codegen.core.rustlang.Attribute
 import software.amazon.smithy.rust.codegen.core.rustlang.CargoDependency
@@ -713,9 +717,26 @@ class XmlBindingTraitParserGenerator(
             }
 
             is NumberShape, is BooleanShape -> {
+                // The symbol may resolve to a constrained wrapper newtype on the server side when
+                // `@range` (numbers) is applied to the shape, but `aws_smithy_types::primitive::Parse`
+                // is only implemented on the canonical primitive (`i32`, `i64`, `bool`, …). Parse via
+                // the underlying primitive and let the builder run the constraint check — the input
+                // builder accepts the unconstrained value through `MaybeConstrained::Unconstrained` and
+                // unconstrained-target structures (e.g. output bodies) hold the primitive directly.
+                val parseTargetType =
+                    if (symbolProvider.toSymbol(shape).rustType() is RustType.Opaque) {
+                        SimpleShapes[shape::class]?.render()
+                            ?: throw CodegenException("unsupported NumberShape kind for primitive parsing: $shape")
+                    } else {
+                        null
+                    }
                 rustBlock("") {
                     withBlockTemplate(
-                        "<#{shape} as #{aws_smithy_types}::primitive::Parse>::parse_smithy_primitive(",
+                        if (parseTargetType != null) {
+                            "<$parseTargetType as #{aws_smithy_types}::primitive::Parse>::parse_smithy_primitive("
+                        } else {
+                            "<#{shape} as #{aws_smithy_types}::primitive::Parse>::parse_smithy_primitive("
+                        },
                         ")",
                         *codegenScope,
                         "shape" to symbolProvider.toSymbol(shape),
@@ -766,7 +787,16 @@ class XmlBindingTraitParserGenerator(
         shape: StringShape,
         provider: Writable,
     ) {
-        withBlock("Result::<#T, #T>::Ok(", ")", symbolProvider.toSymbol(shape), xmlDecodeError) {
+        val symbol = symbolProvider.toSymbol(shape)
+        // A constrained string shape (e.g. `@pattern`) resolves to a wrapper newtype that exposes only
+        // `TryFrom<String>` — `From<&str>` does not exist on it. The XML parser must produce the raw
+        // `String` here and let the input builder run the validation; the builder's setter accepts the
+        // raw string and lifts it into the `MaybeConstrained` wrapper itself. Enum-targeted strings are
+        // unaffected: the enum either has a `From<&str>` (open enum) or a `TryFrom<&str>` (server-side
+        // closed enum) that this branch already handles.
+        val isConstrainedNewtype = symbol.rustType() is RustType.Opaque && !shape.hasTrait<EnumTrait>()
+        val resultType: Any = if (isConstrainedNewtype) RuntimeType.String else symbol
+        withBlock("Result::<#T, #T>::Ok(", ")", resultType, xmlDecodeError) {
             if (shape.hasTrait<EnumTrait>()) {
                 val enumSymbol = symbolProvider.toSymbol(shape)
                 if (convertsToEnumInServer(shape)) {

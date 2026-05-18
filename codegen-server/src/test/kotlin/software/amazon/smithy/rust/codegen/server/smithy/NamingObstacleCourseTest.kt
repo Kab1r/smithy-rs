@@ -40,6 +40,66 @@ class NamingObstacleCourseTest {
     // assigning the deserialized Blob to a field that is itself typed as `Blob` (not `Vec<u8>`),
     // otherwise rustc reports E0308 `expected Vec<u8>, found Blob` and every such service stops
     // compiling.
+    // restXml services that route a constrained primitive (e.g. `@range integer`) through the XML
+    // body must parse the underlying primitive first and let the input builder run the constraint
+    // check. The XML parser previously called `<ConstrainedType as Parse>::parse_smithy_primitive`,
+    // but `Parse` is only implemented on the canonical primitive — so every restXml service whose
+    // closure contained a constrained number stopped compiling with E0277 in
+    // `protocol_serde/shape_*.rs`.
+    @Test
+    fun `restXml operations with constrained number members compile`() {
+        val model =
+            """
+            namespace test
+
+            use aws.protocols#restXml
+            use smithy.framework#ValidationException
+
+            @restXml
+            service RestXmlConstrained {
+                version: "2024-01-01"
+                operations: [ConstrainedInput]
+            }
+
+            @http(uri: "/items", method: "POST")
+            operation ConstrainedInput {
+                input: ConstrainedInputInput
+                output: ConstrainedInputOutput
+                errors: [ValidationException]
+            }
+
+            structure ConstrainedInputInput {
+                count: ConstrainedCount
+                tag: ConstrainedTag
+
+                @httpHeader("X-Count")
+                headerCount: ConstrainedCount
+
+                @httpHeader("X-Tag")
+                headerTag: ConstrainedTag
+
+                @httpQuery("count")
+                queryCount: ConstrainedCount
+
+                @httpQuery("tag")
+                queryTag: ConstrainedTag
+            }
+
+            structure ConstrainedInputOutput {
+                @required
+                count: ConstrainedCount
+            }
+
+            @range(min: 1, max: 100)
+            integer ConstrainedCount
+
+            @pattern("^[A-Za-z0-9]+${'$'}")
+            string ConstrainedTag
+            """.asSmithyModel(smithyVersion = "2")
+
+        serverIntegrationTest(model) { _, _ -> }
+    }
+
     @Test
     fun `operations with a Blob HTTP payload output compile`() {
         val model =
