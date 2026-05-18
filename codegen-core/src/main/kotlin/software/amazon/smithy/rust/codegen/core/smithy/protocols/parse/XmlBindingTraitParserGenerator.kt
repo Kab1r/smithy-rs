@@ -472,39 +472,46 @@ class XmlBindingTraitParserGenerator(
         shape: UnionShape,
         ctx: Ctx,
     ) {
-        val symbol = symbolProvider.toSymbol(shape)
+        // For server codegen of constrained-reachable unions, `returnSymbolToParse` resolves to the
+        // `<Name>Unconstrained` enum emitted by [UnconstrainedUnionGenerator]. Its variants share
+        // their identifiers with the user-facing union's variants but each holds the unconstrained
+        // inner type the per-member parsers actually produce — so by constructing variants on the
+        // unconstrained enum here, the builder's `From<<Name>Unconstrained> for MaybeConstrained`
+        // impl handles the lift. For client codegen and for unions that don't reach a constrained
+        // shape, this stays at the regular union symbol.
+        val returnSymbol = returnSymbolToParse(shape).symbol
         val nestedParser =
             protocolFunctions.deserializeFn(shape) { fnName ->
                 rustBlockTemplate(
                     "pub fn $fnName(decoder: &mut #{ScopedDecoder}) -> #{Result}<#{Shape}, #{XmlDecodeError}>",
-                    *codegenScope, "Shape" to symbol,
+                    *codegenScope, "Shape" to returnSymbol,
                 ) {
                     val members = shape.members()
-                    rustTemplate("let mut base: Option<#{Shape}> = None;", *codegenScope, "Shape" to symbol)
+                    rustTemplate("let mut base: Option<#{Shape}> = None;", *codegenScope, "Shape" to returnSymbol)
                     parseLoop(Ctx(tag = "decoder", accum = null), ignoreUnexpected = false) { ctx ->
                         members.forEach { member ->
                             val variantName = symbolProvider.toMemberName(member)
                             case(member) {
                                 if (member.isTargetUnit()) {
-                                    rust("base = Some(#T::$variantName);", symbol)
+                                    rust("base = Some(#T::$variantName);", returnSymbol)
                                 } else {
                                     val current =
                                         """
                                         (match base.take() {
                                             None => None,
-                                            Some(${format(symbol)}::$variantName(inner)) => Some(inner),
+                                            Some(${format(returnSymbol)}::$variantName(inner)) => Some(inner),
                                             Some(_) => return Err(#{XmlDecodeError}::custom("mixed variants"))
                                         })
                                         """
                                     withBlock("let tmp =", ";") {
                                         parseMember(member, ctx.copy(accum = current.trim()))
                                     }
-                                    rust("base = Some(#T::$variantName(tmp));", symbol)
+                                    rust("base = Some(#T::$variantName(tmp));", returnSymbol)
                                 }
                             }
                         }
                         when (target.renderUnknownVariant()) {
-                            true -> rust("_unknown => base = Some(#T::${UnionGenerator.UNKNOWN_VARIANT_NAME}),", symbol)
+                            true -> rust("_unknown => base = Some(#T::${UnionGenerator.UNKNOWN_VARIANT_NAME}),", returnSymbol)
                             false ->
                                 rustTemplate(
                                     """variant => return Err(#{XmlDecodeError}::custom(format!("unexpected union variant: {variant:?}")))""",
@@ -624,11 +631,28 @@ class XmlBindingTraitParserGenerator(
         val (returnSymbol, returnUnconstrained) = returnSymbolToParse(target)
         withBlock("Result::<#T, #T>::Ok({", "})", returnSymbol, xmlDecodeError) {
             val accum = ctx.accum ?: throw CodegenException("Need accum to parse flat list")
-            // The accumulator stored on the builder is the same wrapper newtype the helper returns. We
-            // unwrap to the underlying `Vec` for the `.push(...)` call (the constrained wrapper does not
-            // expose `push`) and re-wrap on the way out for the server-side case.
             if (returnUnconstrained) {
-                rustTemplate("""let mut $list = $accum.unwrap_or_default().0;""", *codegenScope)
+                // The builder field for a constrained-reachable list is
+                // `Option<MaybeConstrained<Wrapper>>`. `MaybeConstrained` is an enum (not a tuple
+                // newtype, and it doesn't implement `Default`), so the unconstrained branch can't
+                // use `.unwrap_or_default()` / `.0`. Pattern-match instead so that the in-progress
+                // `Unconstrained` accumulator's inner `Vec` is reused and any other state — including
+                // the first parsed element being absent — falls back to an empty `Vec`. We don't
+                // expect to see a fully-`Constrained` value at parse time (the parser only ever
+                // writes `Unconstrained`), so that arm panics if reached, mirroring how the existing
+                // server-builder codegen handles the same invariant elsewhere.
+                rustTemplate(
+                    """
+                    let mut $list = match $accum {
+                        Some(#{MaybeConstrained}::Unconstrained(unconstrained)) => unconstrained.0,
+                        Some(#{MaybeConstrained}::Constrained(_)) => unreachable!("server-side XML parser never writes a constrained value back to a flat-list accumulator; please file a bug report under https://github.com/smithy-lang/smithy-rs/issues"),
+                        None => #{Vec}::new(),
+                    };
+                    """,
+                    *codegenScope,
+                    "MaybeConstrained" to RuntimeType.MaybeConstrained,
+                    "Vec" to RuntimeType.Vec,
+                )
             } else {
                 rustTemplate("""let mut $list = $accum.unwrap_or_default();""", *codegenScope)
             }
@@ -681,12 +705,22 @@ class XmlBindingTraitParserGenerator(
         withBlock("Result::<#T, #T>::Ok({", "})", returnSymbol, xmlDecodeError) {
             val accum = ctx.accum ?: throw CodegenException("need accum to parse flat map")
             if (returnUnconstrained) {
+                // See `parseFlatList` for the matching analysis: the builder field is
+                // `Option<MaybeConstrained<Wrapper>>` and `MaybeConstrained` is an enum that does
+                // not implement `Default`, so the unconstrained-branch can't use
+                // `.unwrap_or_default()` / `.0`.
                 rustTemplate(
                     """
-                    let mut $map = $accum.unwrap_or_default().0;
+                    let mut $map = match $accum {
+                        Some(#{MaybeConstrained}::Unconstrained(unconstrained)) => unconstrained.0,
+                        Some(#{MaybeConstrained}::Constrained(_)) => unreachable!("server-side XML parser never writes a constrained value back to a flat-map accumulator; please file a bug report under https://github.com/smithy-lang/smithy-rs/issues"),
+                        None => #{HashMap}::new(),
+                    };
                     #{decoder}(&mut tag, &mut $map)?;
                     """,
                     *codegenScope,
+                    "MaybeConstrained" to RuntimeType.MaybeConstrained,
+                    "HashMap" to RuntimeType.HashMap,
                     "decoder" to entryDecoder,
                 )
                 rust("#T($map)", returnSymbol)

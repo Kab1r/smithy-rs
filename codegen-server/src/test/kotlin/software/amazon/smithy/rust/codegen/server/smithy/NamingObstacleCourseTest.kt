@@ -75,6 +75,11 @@ class NamingObstacleCourseTest {
                 attributes: ConstrainedAttributes
                 nested: NestedHolder
                 kind: ConstrainedKind
+                choice: AnalyticsFilter
+
+                @xmlFlattened
+                rules: LifecycleRules
+
                 @required
                 enabled: Boolean
                 @required
@@ -137,6 +142,23 @@ class NamingObstacleCourseTest {
             map ConstrainedAttributes {
                 key: ConstrainedTag
                 value: ConstrainedTag
+            }
+
+            // Mirrors `s3#AnalyticsFilter` and its peers: a union whose variants target
+            // constrained-reachable structures and primitives, used as an input member.
+            union AnalyticsFilter {
+                prefix: ConstrainedTag
+                tag: NestedHolder
+            }
+
+            // Mirrors `s3#LifecycleRules`: a list whose containing member is `@xmlFlattened`,
+            // with elements that target a constrained-reachable structure.
+            list LifecycleRules {
+                member: LifecycleRule
+            }
+
+            structure LifecycleRule {
+                id: ConstrainedTag
             }
             """.asSmithyModel(smithyVersion = "2")
 
