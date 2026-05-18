@@ -11,14 +11,23 @@ import software.amazon.smithy.rust.codegen.core.rustlang.Writable
 import software.amazon.smithy.rust.codegen.core.rustlang.join
 import software.amazon.smithy.rust.codegen.core.rustlang.rustTemplate
 import software.amazon.smithy.rust.codegen.core.smithy.RuntimeType
+import software.amazon.smithy.rust.codegen.server.smithy.util.ValidationExceptionFieldIdentifiers
 
 /**
  * Information needed to render a constraint trait as Rust code.
+ *
+ * `asValidationExceptionField` is parameterised by the runtime field identifiers because the
+ * synthetic `crate::model::ValidationExceptionField` constructor's member names depend on the
+ * modeled field structure: most services use the canonical `path` / `message` names, but services
+ * that declare their own field structure (Shield is the canonical example) may use `name` /
+ * `message`. The consumer resolves the identifiers via
+ * [software.amazon.smithy.rust.codegen.server.smithy.util.resolveValidationExceptionFieldIdentifiers]
+ * once per emission site and passes the result through here.
  */
 data class TraitInfo(
     val tryFromCheck: Writable,
     val constraintViolationVariant: Writable,
-    val asValidationExceptionField: Writable,
+    val asValidationExceptionField: (ValidationExceptionFieldIdentifiers) -> Writable,
     val validationFunctionDefinition: (constraintViolation: Symbol, unconstrainedTypeName: String) -> Writable,
     private val testCases: List<Writable> = listOf(),
 ) {

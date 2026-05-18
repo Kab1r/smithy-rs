@@ -245,7 +245,7 @@ sealed class CollectionTraitInfo {
                         "MemberSymbol" to memberSymbol,
                     )
                 },
-                asValidationExceptionField = {
+                asValidationExceptionField = { identifiers ->
                     // smithy-typescript echoes back one instance of each repeated element after sorting them [0]:
                     //
                     // I think we shouldn't do this for several reasons:
@@ -280,15 +280,17 @@ sealed class CollectionTraitInfo {
                     //
                     // [0]: https://github.com/awslabs/smithy-typescript/blob/517c85f8baccf0e5334b4e66d8786bdb5791c595/smithy-typescript-ssdk-libs/server-common/src/validation/validators.ts#L310
                     // [1]: https://github.com/awslabs/smithy-typescript/blob/517c85f8baccf0e5334b4e66d8786bdb5791c595/smithy-typescript-ssdk-libs/server-common/src/validation/index.ts#L106-L111
-                    rust(
-                        """
-                        Self::UniqueItems { duplicate_indices, .. } =>
-                            crate::model::ValidationExceptionField {
-                                message: format!("${uniqueItemsTrait.validationErrorMessage()}", &duplicate_indices, &path),
-                                path,
-                            },
-                        """,
-                    )
+                    writable {
+                        rust(
+                            """
+                            Self::UniqueItems { duplicate_indices, .. } =>
+                                crate::model::ValidationExceptionField {
+                                    ${identifiers.messageMember}: format!("${uniqueItemsTrait.validationErrorMessage()}", &duplicate_indices, &path),
+                                    ${identifiers.nameMember}: path,
+                                },
+                            """,
+                        )
+                    }
                 },
                 validationFunctionDefinition = { constraintViolation, _ ->
                     {
@@ -368,15 +370,17 @@ sealed class CollectionTraitInfo {
                     docs("Constraint violation error when the list doesn't have the required length")
                     rust("Length(usize)")
                 },
-                asValidationExceptionField = {
-                    rust(
-                        """
-                        Self::Length(length) => crate::model::ValidationExceptionField {
-                            message: format!("${lengthTrait.validationErrorMessage()}", length, &path),
-                            path,
-                        },
-                        """,
-                    )
+                asValidationExceptionField = { identifiers ->
+                    writable {
+                        rust(
+                            """
+                            Self::Length(length) => crate::model::ValidationExceptionField {
+                                ${identifiers.messageMember}: format!("${lengthTrait.validationErrorMessage()}", length, &path),
+                                ${identifiers.nameMember}: path,
+                            },
+                            """,
+                        )
+                    }
                 },
                 validationFunctionDefinition = { constraintViolation, _ ->
                     {

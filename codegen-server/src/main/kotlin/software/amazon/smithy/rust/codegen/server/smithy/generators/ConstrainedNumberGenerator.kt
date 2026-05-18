@@ -22,6 +22,7 @@ import software.amazon.smithy.rust.codegen.core.rustlang.documentShape
 import software.amazon.smithy.rust.codegen.core.rustlang.render
 import software.amazon.smithy.rust.codegen.core.rustlang.rust
 import software.amazon.smithy.rust.codegen.core.rustlang.rustTemplate
+import software.amazon.smithy.rust.codegen.core.rustlang.writable
 import software.amazon.smithy.rust.codegen.core.smithy.RuntimeType
 import software.amazon.smithy.rust.codegen.core.smithy.expectRustMetadata
 import software.amazon.smithy.rust.codegen.core.smithy.makeMaybeConstrained
@@ -175,15 +176,17 @@ data class Range(val rangeTrait: RangeTrait) {
         TraitInfo(
             { rust("Self::check_range(value)?;") },
             { docs("Error when a number doesn't satisfy its `@range` requirements.") },
-            {
-                rust(
-                    """
-                    Self::Range(_) => crate::model::ValidationExceptionField {
-                        message: format!("${rangeTrait.validationErrorMessage()}", &path),
-                        path,
-                    },
-                    """,
-                )
+            { identifiers ->
+                writable {
+                    rust(
+                        """
+                        Self::Range(_) => crate::model::ValidationExceptionField {
+                            ${identifiers.messageMember}: format!("${rangeTrait.validationErrorMessage()}", &path),
+                            ${identifiers.nameMember}: path,
+                        },
+                        """,
+                    )
+                }
             },
             this::renderValidationFunction,
         )

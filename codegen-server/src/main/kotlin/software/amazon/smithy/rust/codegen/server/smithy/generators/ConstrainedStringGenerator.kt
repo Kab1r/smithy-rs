@@ -247,15 +247,17 @@ data class Length(val lengthTrait: LengthTrait) : StringTraitInfo() {
                 docs("Error when a string doesn't satisfy its `@length` requirements.")
                 rust("Length(usize)")
             },
-            asValidationExceptionField = {
-                rust(
-                    """
-                    Self::Length(length) => crate::model::ValidationExceptionField {
-                        message: format!("${lengthTrait.validationErrorMessage()}", length, &path),
-                        path,
-                    },
-                    """,
-                )
+            asValidationExceptionField = { identifiers ->
+                writable {
+                    rust(
+                        """
+                        Self::Length(length) => crate::model::ValidationExceptionField {
+                            ${identifiers.messageMember}: format!("${lengthTrait.validationErrorMessage()}", length, &path),
+                            ${identifiers.nameMember}: path,
+                        },
+                        """,
+                    )
+                }
             },
             validationFunctionDefinition = this::renderValidationFunction,
         )
@@ -311,17 +313,19 @@ data class Pattern(val symbol: Symbol, val patternTrait: PatternTrait, val isSen
                 docs("Contains the String that failed the pattern.")
                 rust("Pattern(String)")
             },
-            asValidationExceptionField = {
-                Attribute.AllowUnusedVariables.render(this)
-                rustTemplate(
-                    """
-                    Self::Pattern(_) => crate::model::ValidationExceptionField {
-                        message: #{ErrorMessage:W},
-                        path
-                    },
-                    """,
-                    "ErrorMessage" to errorMessage(),
-                )
+            asValidationExceptionField = { identifiers ->
+                writable {
+                    Attribute.AllowUnusedVariables.render(this)
+                    rustTemplate(
+                        """
+                        Self::Pattern(_) => crate::model::ValidationExceptionField {
+                            ${identifiers.messageMember}: #{ErrorMessage:W},
+                            ${identifiers.nameMember}: path,
+                        },
+                        """,
+                        "ErrorMessage" to errorMessage(),
+                    )
+                }
             },
             this::renderValidationFunction,
             testCases =

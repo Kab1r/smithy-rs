@@ -185,15 +185,17 @@ data class BlobLength(val lengthTrait: LengthTrait) : BlobConstraintGenerator {
                 docs("Error when a blob doesn't satisfy its `@length` requirements.")
                 rust("Length(usize)")
             },
-            {
-                rust(
-                    """
-                    Self::Length(length) => crate::model::ValidationExceptionField {
-                        message: format!("${lengthTrait.validationErrorMessage()}", length, &path),
-                        path,
-                    },
-                    """,
-                )
+            { identifiers ->
+                writable {
+                    rust(
+                        """
+                        Self::Length(length) => crate::model::ValidationExceptionField {
+                            ${identifiers.messageMember}: format!("${lengthTrait.validationErrorMessage()}", length, &path),
+                            ${identifiers.nameMember}: path,
+                        },
+                        """,
+                    )
+                }
             },
             this::renderValidationFunction,
         )

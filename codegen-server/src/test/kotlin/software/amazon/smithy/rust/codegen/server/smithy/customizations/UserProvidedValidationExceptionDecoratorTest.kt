@@ -1049,4 +1049,15 @@ internal class UserProvidedValidationExceptionDecoratorTest {
         val fieldListMember = frameworkException.members().first { it.memberName == "fieldList" }
         fieldListMember.target shouldBe ShapeId.from("com.aws.example#ValidationExceptionFieldList")
     }
+
+    @Test
+    fun `code compiles when the model declares ValidationExceptionField without a custom validation exception`() {
+        // End-to-end coverage: the modeled `ValidationExceptionField` survives, the framework one is
+        // replaced, and the synthetic `as_validation_exception_field` constructor projects its struct
+        // literals to the modeled member identifiers (`name` / `message`) instead of the canonical
+        // `path` / `message`.
+        val generatedServers = serverIntegrationTest(modelWithFieldOnlyButNoCustomException, testCoverage = HttpTestType.Default)
+        val modelRs = generatedServers.single().path.resolve("src/model.rs").toFile().readText()
+        Regex("""pub struct ValidationExceptionField\b""").findAll(modelRs).count() shouldBe 1
+    }
 }

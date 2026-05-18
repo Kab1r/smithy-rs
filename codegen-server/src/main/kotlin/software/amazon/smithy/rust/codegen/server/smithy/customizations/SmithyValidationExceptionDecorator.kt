@@ -36,6 +36,7 @@ import software.amazon.smithy.rust.codegen.server.smithy.generators.ValidationEx
 import software.amazon.smithy.rust.codegen.server.smithy.generators.isKeyConstrained
 import software.amazon.smithy.rust.codegen.server.smithy.generators.isValueConstrained
 import software.amazon.smithy.rust.codegen.server.smithy.generators.protocol.ServerProtocol
+import software.amazon.smithy.rust.codegen.server.smithy.util.resolveValidationExceptionFieldIdentifiers
 import software.amazon.smithy.rust.codegen.server.smithy.validationErrorMessage
 
 /**
@@ -69,6 +70,13 @@ class SmithyValidationExceptionConversionGenerator(private val codegenContext: S
 
     override val shapeId: ShapeId = SHAPE_ID
 
+    // The Rust identifiers for the modeled validation field's name- and message-bearing members. For most
+    // services these resolve to the canonical framework defaults (`path` / `message`); for services that
+    // declare their own field structure with different members (Shield uses `name` / `message`) they pick
+    // up the modeled names so the synthetic struct literals do not reference fields that do not exist.
+    private val fieldIdentifiers =
+        resolveValidationExceptionFieldIdentifiers(codegenContext.model, codegenContext.symbolProvider)
+
     override fun renderImplFromConstraintViolationForRequestRejection(protocol: ServerProtocol): Writable =
         writable {
             rustTemplate(
@@ -77,7 +85,7 @@ class SmithyValidationExceptionConversionGenerator(private val codegenContext: S
                     fn from(constraint_violation: ConstraintViolation) -> Self {
                         let first_validation_exception_field = constraint_violation.as_validation_exception_field("".to_owned());
                         let validation_exception = crate::error::ValidationException {
-                            message: format!("1 validation error detected. {}", &first_validation_exception_field.message),
+                            message: format!("1 validation error detected. {}", &first_validation_exception_field.${fieldIdentifiers.messageMember}),
                             field_list: Some(vec![first_validation_exception_field]),
                         };
                         Self::ConstraintViolation(
@@ -105,7 +113,7 @@ class SmithyValidationExceptionConversionGenerator(private val codegenContext: S
                 }
                 """,
                 "String" to RuntimeType.String,
-                "ValidationExceptionFields" to constraintsInfo.map { it.asValidationExceptionField }.join("\n"),
+                "ValidationExceptionFields" to constraintsInfo.map { it.asValidationExceptionField(fieldIdentifiers) }.join("\n"),
             )
         }
 
@@ -122,7 +130,7 @@ class SmithyValidationExceptionConversionGenerator(private val codegenContext: S
                 }
                 """,
                 "String" to RuntimeType.String,
-                "ValidationExceptionFields" to constraintsInfo.map { it.asValidationExceptionField }.join("\n"),
+                "ValidationExceptionFields" to constraintsInfo.map { it.asValidationExceptionField(fieldIdentifiers) }.join("\n"),
             )
         }
 
@@ -142,8 +150,8 @@ class SmithyValidationExceptionConversionGenerator(private val codegenContext: S
                     rust(
                         """
                         Self::Length(length) => crate::model::ValidationExceptionField {
-                            message: format!("${it.validationErrorMessage()}", length, &path),
-                            path,
+                            ${fieldIdentifiers.messageMember}: format!("${it.validationErrorMessage()}", length, &path),
+                            ${fieldIdentifiers.nameMember}: path,
                         },""",
                     )
                 }
@@ -169,8 +177,8 @@ class SmithyValidationExceptionConversionGenerator(private val codegenContext: S
                 """
                 pub(crate) fn as_validation_exception_field(self, path: #{String}) -> crate::model::ValidationExceptionField {
                     crate::model::ValidationExceptionField {
-                        message: format!(r##"$message"##, &path),
-                        path,
+                        ${fieldIdentifiers.messageMember}: format!(r##"$message"##, &path),
+                        ${fieldIdentifiers.nameMember}: path,
                     }
                 }
                 """,
@@ -189,7 +197,7 @@ class SmithyValidationExceptionConversionGenerator(private val codegenContext: S
                 }
                 """,
                 "String" to RuntimeType.String,
-                "ValidationExceptionFields" to rangeInfo.toTraitInfo().asValidationExceptionField,
+                "ValidationExceptionFields" to rangeInfo.toTraitInfo().asValidationExceptionField(fieldIdentifiers),
             )
         }
 
@@ -207,8 +215,8 @@ class SmithyValidationExceptionConversionGenerator(private val codegenContext: S
                             rust(
                                 """
                                 ConstraintViolation::${it.name()} => crate::model::ValidationExceptionField {
-                                    message: format!("Value at '{}/${it.forMember.memberName}' failed to satisfy constraint: Member must not be null", path),
-                                    path: path + "/${it.forMember.memberName}",
+                                    ${fieldIdentifiers.messageMember}: format!("Value at '{}/${it.forMember.memberName}' failed to satisfy constraint: Member must not be null", path),
+                                    ${fieldIdentifiers.nameMember}: path + "/${it.forMember.memberName}",
                                 },
                                 """,
                             )
@@ -224,7 +232,7 @@ class SmithyValidationExceptionConversionGenerator(private val codegenContext: S
     ) = writable {
         val validationExceptionFields =
             collectionConstraintsInfo.map {
-                it.toTraitInfo().asValidationExceptionField
+                it.toTraitInfo().asValidationExceptionField(fieldIdentifiers)
             }.toMutableList()
         if (isMemberConstrained) {
             validationExceptionFields += {
