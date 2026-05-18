@@ -358,10 +358,15 @@ fun handleOptionality(
  */
 fun SymbolProvider.testModuleForShape(shape: Shape): RustModule.LeafModule {
     val symbol = toSymbol(shape)
-    val rustName = symbol.name.unsafeToRustName()
+    // Compose the module identifier first and only then ask `RustReservedWords` whether it needs
+    // raw-identifier escaping. Escaping the snake-cased shape name in isolation produces tokens
+    // like `r#macro`, and `test_` + `r#macro` parses as the unknown literal prefix `test_r#…`.
+    // Composing first means the prefix is part of the candidate identifier, so a keyword like
+    // `macro` becomes a non-keyword `test_macro` that needs no escaping at all.
+    val rustName = RustReservedWords.escapeIfNeeded("test_${symbol.name.toSnakeCase()}")
 
     return RustModule.new(
-        name = "test_$rustName",
+        name = rustName,
         visibility = Visibility.PRIVATE,
         inline = true,
         parent = symbol.module(),

@@ -340,4 +340,34 @@ class ConstrainedStringGeneratorTest {
             project.compileAndTest()
         }
     }
+
+    @Test
+    fun `regex tests compile when the shape snake-cases to a Rust keyword`() {
+        // `Macro` snake-cases to `macro`, which is a Rust keyword. The regex test module's
+        // identifier must be composed before raw-identifier escaping is applied so the prefixed
+        // `test_macro` is recognised as a non-keyword and emitted without the `r#` escape.
+        val model =
+            """
+            namespace test
+
+            @pattern("^foo${'$'}")
+            string Macro
+            """.asSmithyModel()
+
+        val constrainedStringShape = model.lookup<StringShape>("test#Macro")
+        val codegenContext = serverTestCodegenContext(model)
+        val project = TestWorkspace.testProject(codegenContext.symbolProvider)
+
+        project.withModule(ServerRustModule.Model) {
+            ConstrainedStringGenerator(
+                codegenContext,
+                this.createTestInlineModuleCreator(),
+                this,
+                constrainedStringShape,
+                SmithyValidationExceptionConversionGenerator(codegenContext),
+            ).render()
+        }
+
+        project.compileAndTest()
+    }
 }
