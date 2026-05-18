@@ -798,4 +798,79 @@ internal class UserProvidedValidationExceptionDecoratorTest {
     fun `code compiles with implicit path member name`() {
         serverIntegrationTest(modelWithFieldNamedPath, testCoverage = HttpTestType.Default)
     }
+
+    private val modelWithCollidingFrameworkValidationExceptionField =
+        """
+        namespace com.aws.example
+
+        use aws.protocols#restJson1
+        use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationFieldList
+        use smithy.framework.rust#validationFieldMessage
+        use smithy.framework.rust#validationFieldName
+        use smithy.framework.rust#validationMessage
+
+        @restJson1
+        service CustomValidationExample {
+            version: "1.0.0"
+            operations: [TestOperation, ShowField]
+        }
+
+        @http(method: "POST", uri: "/test")
+        operation TestOperation {
+            input: TestInput
+            errors: [smithy.framework#ValidationException]
+        }
+
+        @http(method: "GET", uri: "/show-field")
+        @readonly
+        operation ShowField {
+            output: ShowFieldOutput
+        }
+
+        structure ShowFieldOutput {
+            // References framework's ValidationExceptionField directly so it stays reachable
+            field: smithy.framework#ValidationExceptionField
+        }
+
+        structure TestInput {
+            @required
+            @length(min: 1, max: 10)
+            name: String
+        }
+
+        @error("client")
+        @httpError(400)
+        @validationException
+        structure ValidationException {
+            @required
+            @validationMessage
+            message: String
+
+            @validationFieldList
+            fieldList: ValidationExceptionFieldList
+        }
+
+        structure ValidationExceptionField {
+            @required
+            @validationFieldName
+            name: String
+
+            @required
+            @validationFieldMessage
+            message: String
+        }
+
+        list ValidationExceptionFieldList {
+            member: ValidationExceptionField
+        }
+        """.asSmithyModel(smithyVersion = "2.0")
+
+    @Test
+    fun `framework validation exception field is not emitted when a user-modeled one exists with the same local name`() {
+        val generatedServers = serverIntegrationTest(modelWithCollidingFrameworkValidationExceptionField, testCoverage = HttpTestType.Default)
+        val modelRs = generatedServers.single().path.resolve("src/model.rs").toFile().readText()
+        val occurrences = Regex("""pub struct ValidationExceptionField\b""").findAll(modelRs).count()
+        occurrences shouldBe 1
+    }
 }
