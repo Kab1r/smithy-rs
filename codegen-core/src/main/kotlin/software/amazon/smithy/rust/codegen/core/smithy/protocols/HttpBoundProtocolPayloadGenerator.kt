@@ -20,6 +20,7 @@ import software.amazon.smithy.rust.codegen.core.rustlang.rustBlockTemplate
 import software.amazon.smithy.rust.codegen.core.rustlang.withBlock
 import software.amazon.smithy.rust.codegen.core.rustlang.withBlockTemplate
 import software.amazon.smithy.rust.codegen.core.smithy.CodegenContext
+import software.amazon.smithy.rust.codegen.core.smithy.rustType
 import software.amazon.smithy.rust.codegen.core.smithy.CodegenTarget
 import software.amazon.smithy.rust.codegen.core.smithy.RuntimeType
 import software.amazon.smithy.rust.codegen.core.smithy.generators.http.HttpMessageType
@@ -379,8 +380,18 @@ class HttpBoundProtocolPayloadGenerator(
                     // Return the `ByteStream`.
                     rust(payloadName)
                 } else {
-                    // Convert the `Blob` into a `Vec<u8>` and return it.
-                    rust("$payloadName.into_inner()")
+                    // Convert the `Blob` into a `Vec<u8>` and return it. When the shape has constraints, the
+                    // payload's static type is the server-side constrained wrapper tuple newtype rather than
+                    // `aws_smithy_types::Blob` directly. The newtype's `into_inner()` returns the wrapped
+                    // `Blob`, so a second `into_inner()` is required to reach the underlying `Vec<u8>` that
+                    // this function returns.
+                    val plainBlob = RuntimeType.blob(runtimeConfig).toSymbol().rustType()
+                    val targetIsPlainBlob = symbolProvider.toSymbol(targetShape).rustType() == plainBlob
+                    if (targetIsPlainBlob) {
+                        rust("$payloadName.into_inner()")
+                    } else {
+                        rust("$payloadName.into_inner().into_inner()")
+                    }
                 }
             }
 

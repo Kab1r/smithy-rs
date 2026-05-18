@@ -65,16 +65,39 @@ class NamingObstacleCourseTest {
                 @required
                 EndpointName: String
 
+                @httpHeader("Content-Type")
+                ContentType: String
+
+                @httpHeader("X-Amzn-SageMaker-Custom-Attributes")
+                CustomAttributes: String
+
                 @httpPayload
                 @required
-                Body: Blob
+                Body: BodyBlob
             }
 
+            // Mirrors `InvokeEndpointOutput`: a required @httpPayload Blob alongside several
+            // @httpHeader members. The output serializer must hand the field's `Blob` to the wire
+            // writer; it must not assume the field is `Vec<u8>`.
             structure InvokeEndpointOutput {
                 @httpPayload
                 @required
-                Body: Blob
+                Body: BodyBlob
+
+                @httpHeader("Content-Type")
+                ContentType: String
+
+                @httpHeader("X-Amzn-Invoked-Production-Variant")
+                InvokedProductionVariant: String
+
+                @httpHeader("X-Amzn-SageMaker-Custom-Attributes")
+                CustomAttributes: String
             }
+
+            // Many service models (sagemakerruntime, datazone, ...) declare their payload Blob as a
+            // separately named Blob shape, often with no constraints but distinct from `smithy.api#Blob`.
+            @length(min: 0, max: 6291456)
+            blob BodyBlob
             """.asSmithyModel(smithyVersion = "2")
 
         serverIntegrationTest(model) { _, _ -> }
