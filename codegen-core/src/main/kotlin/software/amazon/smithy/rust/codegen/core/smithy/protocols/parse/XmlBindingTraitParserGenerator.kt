@@ -344,11 +344,18 @@ class XmlBindingTraitParserGenerator(
             members.dataMembers.forEach { member ->
                 case(member) {
                     val temp = safeName()
+                    // The setter the generated builder emits for a *required* member takes the bare
+                    // value (`impl Into<T>`), not `Option<T>`: required-ness is enforced when `build()`
+                    // runs, not at the setter site. Wrapping the parsed value in `Some(...)`
+                    // unconditionally produces `Option<T>` and rustc rejects the call. Respect the
+                    // member's natural optionality so optional members still flow as `Some(value)`
+                    // and required members flow as the bare value.
+                    val memberIsOptional = symbolProvider.toSymbol(member).isOptional()
                     withBlock("let $temp =", ";") {
                         parseMember(
                             member,
                             ctx.copy(accum = "$builder.${symbolProvider.toMemberName(member)}.take()"),
-                            forceOptional = true,
+                            forceOptional = memberIsOptional,
                         )
                     }
                     rust("$builder = $builder.${member.setterName()}($temp);")

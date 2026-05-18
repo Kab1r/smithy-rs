@@ -75,6 +75,10 @@ class NamingObstacleCourseTest {
                 attributes: ConstrainedAttributes
                 nested: NestedHolder
                 kind: ConstrainedKind
+                @required
+                enabled: Boolean
+                @required
+                threshold: Integer
 
                 @httpHeader("X-Count")
                 headerCount: ConstrainedCount
