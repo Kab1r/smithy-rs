@@ -13,6 +13,7 @@ import software.amazon.smithy.model.shapes.MapShape
 import software.amazon.smithy.model.shapes.MemberShape
 import software.amazon.smithy.model.shapes.OperationShape
 import software.amazon.smithy.model.shapes.ServiceShape
+import software.amazon.smithy.model.shapes.Shape
 import software.amazon.smithy.model.shapes.ShapeId
 import software.amazon.smithy.model.shapes.StructureShape
 import software.amazon.smithy.model.shapes.UnionShape
@@ -21,53 +22,40 @@ import software.amazon.smithy.rust.codegen.core.util.orNull
 import software.amazon.smithy.rust.codegen.server.smithy.customizations.SmithyValidationExceptionConversionGenerator
 
 /**
- * When the model designates a custom validation exception via `@validationException`, the framework's
- * `smithy.framework#ValidationException` and its companion shapes
- * (`smithy.framework#ValidationExceptionFieldList`, `smithy.framework#ValidationExceptionField`) must not also
- * reach codegen. If an upstream model definition listed any of them — for example by importing
- * `smithy.framework#ValidationException` into an operation's errors before the custom exception was layered on
- * — duplicate top-level Rust definitions land in the generated crate because the framework shapes and the
- * user-defined shapes share their local Smithy names.
+ * When a model declares its own equivalents of any of
+ * `smithy.framework#ValidationException`,
+ * `smithy.framework#ValidationExceptionFieldList`, or
+ * `smithy.framework#ValidationExceptionField`,
+ * the framework counterparts must not also reach codegen. The framework and the user-modeled shapes share
+ * their local Smithy names, so both would land at the same Rust path — duplicate `pub struct` definitions,
+ * duplicate `Debug` / `Clone` impls, duplicate `Builder` items, and a colliding `ConstraintViolation` enum.
  *
- * This transformer rewires every reference to the framework shapes — operation/service errors, structure
- * members, list members, map keys/values, and union members — so they point at the user-defined equivalents
- * where one is known, and removes the framework shapes from the model so that only the user-defined shapes
- * participate in codegen. When a framework helper shape has no user equivalent it is left in the model and
- * relied on to be unreachable from the service closure.
+ * Each shape is replaced independently: the exception, the field-list, and the field can each be modeled on
+ * their own and a service is free to bring just some of them (Shield, for example, models only
+ * `ValidationExceptionField` and `ValidationExceptionFieldList`). For every framework shape whose user-defined
+ * counterpart we can locate, this transformer rewires every operation/service error, structure member, list
+ * member, map key/value, and union member reference to it, then removes the framework shape from the model so
+ * only the user-defined one participates in codegen.
  */
 object ReplaceFrameworkValidationExceptionWithUserDefined {
+    private val frameworkExceptionId = SmithyValidationExceptionConversionGenerator.SHAPE_ID
+    private val frameworkFieldListId = ShapeId.from("smithy.framework#ValidationExceptionFieldList")
+    private val frameworkFieldId = ShapeId.from("smithy.framework#ValidationExceptionField")
+
     fun transform(model: Model): Model {
-        val userValidationException =
-            model.shapes(StructureShape::class.java)
-                .filter { it.hasTrait(ValidationExceptionTrait.ID) }
-                .findFirst()
-                .orNull() ?: return model
-
-        val frameworkExceptionId = SmithyValidationExceptionConversionGenerator.SHAPE_ID
-        val frameworkFieldListId = ShapeId.from("smithy.framework#ValidationExceptionFieldList")
-        val frameworkFieldId = ShapeId.from("smithy.framework#ValidationExceptionField")
-        val frameworkExceptionShape = model.getShape(frameworkExceptionId).orNull() ?: return model
-        if (userValidationException.toShapeId() == frameworkExceptionId) {
-            return model
-        }
-
-        // Look up the user-defined list-of-fields and field shapes via `@validationFieldList`, so that
-        // references to the framework counterparts can be rewired to them. Either may be absent: a custom
-        // validation exception is allowed to omit the field list entirely.
-        val userFieldListId =
-            userValidationException.members()
-                .firstOrNull { it.hasTrait(ValidationFieldListTrait.ID) }
-                ?.target
-        val userFieldId =
-            userFieldListId?.let { model.getShape(it).orNull() as? ListShape }
-                ?.member?.target
+        val userException = userValidationException(model)
+        val userFieldList = userValidationFieldList(model, userException)
+        val userField = userValidationField(model, userFieldList)
 
         val redirects =
             buildMap {
-                put(frameworkExceptionId, userValidationException.toShapeId())
-                userFieldListId?.let { put(frameworkFieldListId, it) }
-                userFieldId?.let { put(frameworkFieldId, it) }
+                userException?.toShapeId()?.takeIf { it != frameworkExceptionId }?.let {
+                    put(frameworkExceptionId, it)
+                }
+                userFieldList?.takeIf { it != frameworkFieldListId }?.let { put(frameworkFieldListId, it) }
+                userField?.takeIf { it != frameworkFieldId }?.let { put(frameworkFieldId, it) }
             }
+        if (redirects.isEmpty()) return model
 
         val transformer = ModelTransformer.create()
         val rewired =
@@ -84,12 +72,57 @@ object ReplaceFrameworkValidationExceptionWithUserDefined {
             }
 
         val shapesToRemove =
-            buildList {
-                add(frameworkExceptionShape)
-                userFieldListId?.let { rewired.getShape(frameworkFieldListId).orNull()?.let(::add) }
-                userFieldId?.let { rewired.getShape(frameworkFieldId).orNull()?.let(::add) }
-            }
+            redirects.keys.mapNotNull { rewired.getShape(it).orNull() }
         return transformer.removeShapes(rewired, shapesToRemove)
+    }
+
+    private fun userValidationException(model: Model): StructureShape? =
+        model.shapes(StructureShape::class.java)
+            .filter { it.hasTrait(ValidationExceptionTrait.ID) }
+            .findFirst()
+            .orNull()
+
+    /**
+     * Returns the [ShapeId] of the list shape that holds the validation field structures, preferring the
+     * member explicitly tagged on the user-defined `ValidationException` via `@validationFieldList` and
+     * falling back to any list shape whose local Smithy name is `ValidationExceptionFieldList`. The latter
+     * fallback is what lets services that declare only the field/list shapes (Shield) still benefit.
+     */
+    private fun userValidationFieldList(
+        model: Model,
+        userException: StructureShape?,
+    ): ShapeId? {
+        val viaTrait =
+            userException?.members()
+                ?.firstOrNull { it.hasTrait(ValidationFieldListTrait.ID) }
+                ?.target
+        if (viaTrait != null) return viaTrait
+        return model.shapes(ListShape::class.java)
+            .filter { it.id.name == "ValidationExceptionFieldList" && it.id != frameworkFieldListId }
+            .findFirst()
+            .orNull()
+            ?.toShapeId()
+    }
+
+    /**
+     * Returns the [ShapeId] of the validation field structure, preferring the member type of the
+     * field-list shape resolved above and falling back to any structure shape whose local Smithy name is
+     * `ValidationExceptionField`.
+     */
+    private fun userValidationField(
+        model: Model,
+        userFieldList: ShapeId?,
+    ): ShapeId? {
+        val viaList =
+            userFieldList?.let { model.getShape(it).orNull() }
+                ?.let { it as? ListShape }
+                ?.member?.target
+        if (viaList != null && viaList != frameworkFieldId) return viaList
+        return model.shapes(StructureShape::class.java)
+            .filter { it.id.name == "ValidationExceptionField" && it.id != frameworkFieldId }
+            .findFirst()
+            .orNull()
+            ?.toShapeId()
     }
 }
 

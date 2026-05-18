@@ -20,6 +20,7 @@ import software.amazon.smithy.rust.codegen.core.testutil.asSmithyModel
 import software.amazon.smithy.rust.codegen.server.smithy.testutil.HttpTestType
 import software.amazon.smithy.rust.codegen.server.smithy.testutil.serverIntegrationTest
 import software.amazon.smithy.rust.codegen.server.smithy.testutil.serverTestCodegenContext
+import software.amazon.smithy.rust.codegen.server.smithy.transformers.ReplaceFrameworkValidationExceptionWithUserDefined
 
 internal class UserProvidedValidationExceptionDecoratorTest {
     private val modelWithCustomValidation =
@@ -987,5 +988,65 @@ internal class UserProvidedValidationExceptionDecoratorTest {
     @Test
     fun `code compiles with defaulted constrained-list additional field`() {
         serverIntegrationTest(modelWithDefaultedConstrainedListAdditionalField, testCoverage = HttpTestType.Default)
+    }
+
+    private val modelWithFieldOnlyButNoCustomException =
+        """
+        namespace com.aws.example
+
+        use aws.protocols#restJson1
+
+        @restJson1
+        service NoCustomExceptionExample {
+            version: "1.0.0"
+            operations: [TestOperation]
+        }
+
+        @http(method: "POST", uri: "/test")
+        operation TestOperation {
+            input: TestInput
+            errors: [smithy.framework#ValidationException]
+        }
+
+        structure TestInput {
+            @required
+            @length(min: 1, max: 10)
+            name: String
+        }
+
+        // The model declares its own `ValidationExceptionField` (and a list-of-fields shape) but does
+        // *not* declare a `@validationException`-marked structure. The framework's
+        // `smithy.framework#ValidationExceptionField` still reaches codegen via
+        // `smithy.framework#ValidationException`, and the two structures share their local name —
+        // resulting in two top-level `pub struct ValidationExceptionField` definitions without a fix.
+        structure ValidationExceptionField {
+            @required
+            name: String
+
+            @required
+            message: String
+        }
+
+        list ValidationExceptionFieldList {
+            member: ValidationExceptionField
+        }
+        """.asSmithyModel(smithyVersion = "2.0")
+
+    @Test
+    fun `framework validation exception field is dropped from the model when the user declares its own without a custom validation exception`() {
+        val transformed =
+            ReplaceFrameworkValidationExceptionWithUserDefined.transform(modelWithFieldOnlyButNoCustomException)
+        // The framework's `ValidationExceptionField` must be removed; otherwise it would collide with
+        // the user-modeled one. The framework `ValidationException` stays — there is no user-modeled
+        // exception to take its place.
+        transformed.getShape(ShapeId.from("smithy.framework#ValidationExceptionField")).isPresent shouldBe false
+        transformed.getShape(ShapeId.from("smithy.framework#ValidationExceptionFieldList")).isPresent shouldBe false
+        transformed.getShape(ShapeId.from("smithy.framework#ValidationException")).isPresent shouldBe true
+        // The user-modeled field/list must survive and be the type the framework `ValidationException`
+        // points at.
+        val frameworkException =
+            transformed.expectShape(ShapeId.from("smithy.framework#ValidationException"), StructureShape::class.java)
+        val fieldListMember = frameworkException.members().first { it.memberName == "fieldList" }
+        fieldListMember.target shouldBe ShapeId.from("com.aws.example#ValidationExceptionFieldList")
     }
 }
