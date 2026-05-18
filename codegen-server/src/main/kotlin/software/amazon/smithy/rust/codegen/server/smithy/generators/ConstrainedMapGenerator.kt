@@ -124,6 +124,30 @@ class ConstrainedMapGenerator(
                     value.into_inner()
                 }
             }
+
+            impl ::std::iter::IntoIterator for $name {
+                type Item = (#{KeySymbol}, #{ValueMemberSymbol});
+                type IntoIter = ::std::collections::hash_map::IntoIter<#{KeySymbol}, #{ValueMemberSymbol}>;
+                fn into_iter(self) -> Self::IntoIter {
+                    self.0.into_iter()
+                }
+            }
+
+            impl<'a> ::std::iter::IntoIterator for &'a $name {
+                type Item = (&'a #{KeySymbol}, &'a #{ValueMemberSymbol});
+                type IntoIter = ::std::collections::hash_map::Iter<'a, #{KeySymbol}, #{ValueMemberSymbol}>;
+                fn into_iter(self) -> Self::IntoIter {
+                    self.0.iter()
+                }
+            }
+
+            impl<'a> ::std::iter::IntoIterator for &'a mut $name {
+                type Item = (&'a #{KeySymbol}, &'a mut #{ValueMemberSymbol});
+                type IntoIter = ::std::collections::hash_map::IterMut<'a, #{KeySymbol}, #{ValueMemberSymbol}>;
+                fn into_iter(self) -> Self::IntoIter {
+                    self.0.iter_mut()
+                }
+            }
             """,
             *codegenScope,
         )

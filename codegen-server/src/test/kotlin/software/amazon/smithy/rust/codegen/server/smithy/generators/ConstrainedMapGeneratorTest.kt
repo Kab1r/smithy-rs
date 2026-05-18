@@ -132,6 +132,43 @@ class ConstrainedMapGeneratorTest {
                     assert_eq!(constrained.into_inner(), map);
                 """,
             )
+            // Server-side codegen iterates over constrained-map fields with `for (k, v) in &input.map`,
+            // which only compiles when `&ConstrainedMap` implements `IntoIterator`. Cover all three
+            // reference flavours, mirroring the regression test for constrained list newtypes.
+            unitTest(
+                name = "into_iterator_by_value",
+                test = """
+                    let map = build_valid_map();
+                    let constrained = ConstrainedMap::try_from(map.clone()).unwrap();
+                    let collected: std::collections::HashMap<String, String> = constrained.into_iter().collect();
+                    assert_eq!(collected, map);
+                """,
+            )
+            unitTest(
+                name = "into_iterator_by_ref",
+                test = """
+                    let map = build_valid_map();
+                    let constrained = ConstrainedMap::try_from(map.clone()).unwrap();
+                    let mut count = 0usize;
+                    for (k, v) in &constrained {
+                        let _: &String = k;
+                        let _: &String = v;
+                        count += 1;
+                    }
+                    assert_eq!(count, map.len());
+                """,
+            )
+            unitTest(
+                name = "into_iterator_by_mut",
+                test = """
+                    let map = build_valid_map();
+                    let mut constrained = ConstrainedMap::try_from(map.clone()).unwrap();
+                    for (_, v) in &mut constrained {
+                        *v = "mutated".to_string();
+                    }
+                    assert!(constrained.into_inner().values().all(|v| v == "mutated"));
+                """,
+            )
         }
 
         project.compileAndTest()
