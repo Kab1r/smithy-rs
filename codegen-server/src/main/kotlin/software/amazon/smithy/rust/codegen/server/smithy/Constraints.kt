@@ -268,14 +268,24 @@ fun Shape.getParentAndInlineModuleForConstrainedMember(
     } else {
         // For constrained member shapes, the ConstraintViolation code needs to go in an inline rust module
         // that is a descendant of the module that contains the extracted shape itself.
+        //
+        // We construct the module purely from `overriddenTrait.container.id.name` rather than asking
+        // `symbolProvider.toSymbol(this)` where it lives. The placement is fully determined by the
+        // container (it mirrors what `ConstrainedShapeSymbolProvider.getMemberNameAndModule` builds for
+        // the same case), and calling back through the symbol provider creates a cycle when the caller
+        // *is* a symbol provider that resolves the shape via this function — most notably
+        // `UnconstrainedShapeSymbolProvider`, which passes `this` and then recurs into
+        // `unconstrainedSymbolForCollectionOrMapOrUnionShape` → here → `toSymbol` with no base case.
         return if (publicConstrainedTypes) {
-            // Non-structured shape types need to go into their own module.
-            val shapeSymbol = symbolProvider.toSymbol(this)
-            val shapeModule = shapeSymbol.module()
-            check(!shapeModule.parent.isInline()) {
-                "Parent module of $id should not be an inline module."
-            }
-            Pair(shapeModule.parent as RustModule.LeafModule, shapeModule)
+            val moduleName = RustReservedWords.escapeIfNeeded(overriddenTrait.container.id.name.toSnakeCase())
+            val innerModule =
+                RustModule.new(
+                    name = moduleName,
+                    visibility = Visibility.PUBLIC,
+                    parent = ServerRustModule.Model,
+                    inline = true,
+                )
+            Pair(ServerRustModule.Model, innerModule)
         } else {
             val name = RustReservedWords.escapeIfNeeded(overriddenTrait.container.id.name).toSnakeCase() + "_internal"
             val innerModule =
