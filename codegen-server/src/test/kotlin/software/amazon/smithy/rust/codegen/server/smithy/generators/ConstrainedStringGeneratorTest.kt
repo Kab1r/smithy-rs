@@ -268,6 +268,52 @@ class ConstrainedStringGeneratorTest {
     }
 
     @Test
+    fun `constrained string member named after a Smithy keyword does not collide with module name`() {
+        // ConstrainedShapeSymbolProvider (lines 173-176) synthesises a newtype for every
+        // constrained member embedded in a structure and places it inside the builder module.
+        // The type name is derived from the *member* name (not the target shape name) and is
+        // PascalCased — so a member literally called `name` becomes the type `Name`.  Without
+        // that PascalCasing the emitted Rust would contain:
+        //   pub struct name(String);          // the newtype
+        //   pub mod   name { … }              // the ConstraintViolation sibling module
+        // …in the same namespace, triggering E0428 and an E0425/E0573 cascade.
+        //
+        // This regression test asserts that code generation for this case compiles cleanly.
+        // If ConstrainedShapeSymbolProvider were ever reverted to a non-PascalCased identifier
+        // the generated Rust would fail to compile and this test would fail.
+        val model =
+            """
+            ${'$'}version: "2.0"
+
+            namespace test
+
+            use aws.protocols#restJson1
+
+            @restJson1
+            service TestService {
+                version: "2024-01-01"
+                operations: [Op]
+            }
+
+            @http(method: "POST", uri: "/op")
+            operation Op {
+                input: OpInput
+            }
+
+            structure OpInput {
+                @required
+                name: ConstrainedName
+            }
+
+            @length(min: 1, max: 128)
+            @pattern("^[a-zA-Z][a-zA-Z0-9_-]*${'$'}")
+            string ConstrainedName
+            """.asSmithyModel(smithyVersion = "2")
+
+        serverIntegrationTest(model, testCoverage = HttpTestType.Default)
+    }
+
+    @Test
     fun `pattern containing a literal control character compiles`() {
         // AWS service models occasionally embed bare control characters (CR / LF / TAB) inside
         // @pattern character classes. Emitting those values through a raw Rust string literal
