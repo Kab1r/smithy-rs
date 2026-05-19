@@ -10,7 +10,6 @@ import software.amazon.smithy.model.pattern.UriPattern
 import software.amazon.smithy.model.shapes.OperationShape
 import software.amazon.smithy.model.shapes.StructureShape
 import software.amazon.smithy.model.traits.HttpTrait
-import software.amazon.smithy.model.traits.TimestampFormatTrait
 import software.amazon.smithy.rust.codegen.core.rustlang.Writable
 import software.amazon.smithy.rust.codegen.core.rustlang.rust
 import software.amazon.smithy.rust.codegen.core.rustlang.rustTemplate
@@ -26,8 +25,6 @@ import software.amazon.smithy.rust.codegen.core.smithy.protocols.Protocol
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.ProtocolGeneratorFactory
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.StaticHttpBindingResolver
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.parse.StructuredDataParserGenerator
-import software.amazon.smithy.rust.codegen.core.smithy.protocols.serialize.Ec2QuerySerializerGenerator
-import software.amazon.smithy.rust.codegen.core.smithy.protocols.serialize.StructuredDataSerializerGenerator
 import software.amazon.smithy.rust.codegen.core.util.dq
 import software.amazon.smithy.rust.codegen.core.util.getTrait
 import software.amazon.smithy.rust.codegen.server.smithy.ServerCargoDependency
@@ -155,27 +152,20 @@ class ServerAwsQueryProtocol(
 
 class ServerEc2QueryProtocol(
     private val serverCodegenContext: ServerCodegenContext,
-) : ServerProtocol {
+) : Ec2QueryProtocol(serverCodegenContext), ServerProtocol {
     private val runtimeConfig = serverCodegenContext.runtimeConfig
-    private val clientProtocol = Ec2QueryProtocol(serverCodegenContext)
 
     override val protocolModulePath: String = "ec2_query"
 
+    // EC2 Query servers respond with `text/xml;charset=UTF-8` (the core's resolver uses `text/xml`).
+    // Override the binding resolver so the server emits the charset-tagged content type.
     override val httpBindingResolver: HttpBindingResolver = ec2HttpBindingResolver(serverCodegenContext)
-
-    override val defaultTimestampFormat: TimestampFormatTrait.Format = TimestampFormatTrait.Format.DATE_TIME
 
     override fun structuredDataParser(): StructuredDataParserGenerator =
         ServerEc2QueryParserGenerator(serverCodegenContext, this)
 
-    override fun structuredDataSerializer(): StructuredDataSerializerGenerator =
-        Ec2QuerySerializerGenerator(serverCodegenContext)
-
-    override fun parseHttpErrorMetadata(operationShape: OperationShape): RuntimeType =
-        clientProtocol.parseHttpErrorMetadata(operationShape)
-
-    override fun parseEventStreamErrorMetadata(operationShape: OperationShape): RuntimeType =
-        clientProtocol.parseEventStreamErrorMetadata(operationShape)
+    // structuredDataSerializer, defaultTimestampFormat, parseHttpErrorMetadata,
+    // parseEventStreamErrorMetadata inherited from Ec2QueryProtocol.
 
     override fun markerStruct(): RuntimeType = ServerRuntimeType.protocol("Ec2Query", protocolModulePath, runtimeConfig)
 
