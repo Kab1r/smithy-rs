@@ -90,7 +90,11 @@ abstract class ServerQueryParserGenerator(
     protected open fun emptyListMarkerIsSerialized(member: MemberShape): Boolean = !member.isFlattened()
 
     override fun payloadParser(member: MemberShape): RuntimeType {
-        TODO("$protocolName does not support server payload-bound query parsing")
+        throw software.amazon.smithy.codegen.core.CodegenException(
+            "Operation member `${member.id}` is bound via @httpPayload, but $protocolName does not support " +
+                "payload-bound members on the server side. Remove the @httpPayload trait or migrate the operation " +
+                "to a structured protocol (awsJson/restJson1/restXml).",
+        )
     }
 
     override fun operationParser(operationShape: OperationShape): RuntimeType? = null
@@ -227,7 +231,12 @@ abstract class ServerQueryParserGenerator(
                         mapParser(target),
                     )
                 is UnionShape -> rust("#T(&pairs, $prefixExpression)?", unionParser(target))
-                else -> TODO("unsupported query member target: $target")
+                else ->
+                    throw software.amazon.smithy.codegen.core.CodegenException(
+                        "Member `${member.id}` targets shape `${target.id}` of type `${target.type}`, which " +
+                            "$protocolName does not support on the server side. Supported targets: string, " +
+                            "boolean, number, timestamp, blob, bigInteger, bigDecimal, structure, list, set, map, union.",
+                    )
             }
             if (isBoxed) {
                 rust(").map(::std::boxed::Box::new)")
@@ -293,7 +302,11 @@ abstract class ServerQueryParserGenerator(
                     RuntimeType.blob(runtimeConfig),
                     requestRejection,
                 )
-            else -> TODO("unsupported query scalar target: $target")
+            else ->
+                throw software.amazon.smithy.codegen.core.CodegenException(
+                    "Member `${member.id}` targets scalar shape `${target.id}` of unsupported type `${target.type}`. " +
+                        "$protocolName scalar members must be string, boolean, number, timestamp, blob, bigInteger, or bigDecimal.",
+                )
         }
     }
 
