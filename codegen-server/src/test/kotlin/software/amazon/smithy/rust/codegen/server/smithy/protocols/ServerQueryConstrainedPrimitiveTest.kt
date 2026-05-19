@@ -45,6 +45,16 @@ class ServerQueryConstrainedPrimitiveTest {
             labels: LabelList,
             uniqueLabels: UniqueLabelList,
             attributes: AttributeMap,
+            nested: NestedStruct,
+            variant: ConstrainedVariant,
+        }
+
+        structure NestedStruct {
+            count: DurationSecondsType,
+        }
+
+        union ConstrainedVariant {
+            number: DurationSecondsType,
         }
 
         structure ConstrainedPrimitiveInputOutput {}
@@ -241,6 +251,88 @@ class ServerQueryConstrainedPrimitiveTest {
                         assert!(body.contains("<count>7</count>"), "unexpected body: {body}");
                         """,
                         *codegenScope,
+                    )
+                }
+
+                tokioTest("constrained_nested_structure_rejects_out_of_range") {
+                    rustTemplate(
+                        """
+                        let config = crate::QueryConstrainedConfig::builder().build();
+                        let service = crate::QueryConstrained::builder(config)
+                            .constrained_primitive_input(constrained_input_handler)
+                            .build_unchecked();
+
+                        // nested.count=-1 violates @range(min: 1) on DurationSecondsType
+                        let request_body = b"Action=ConstrainedPrimitiveInput&Version=2020-01-08&nested.count=-1".to_vec();
+                        let request = #{Http}::Request::builder()
+                            .uri("/")
+                            .method("POST")
+                            .header("content-type", "application/x-www-form-urlencoded")
+                            .body(#{CreateBody:W})
+                            .expect("failed to build request");
+
+                        let response = #{Tower}::ServiceExt::oneshot(service, request)
+                            .await
+                            .expect("failed to call service");
+                        assert_eq!(response.status(), #{Http}::StatusCode::BAD_REQUEST);
+                        """,
+                        *codegenScope,
+                        "CreateBody" to ServerHttpTestHelpers.createBodyFromBytes(codegenContext, "request_body"),
+                    )
+                }
+
+                tokioTest("constrained_map_rejects_over_length_limit") {
+                    rustTemplate(
+                        """
+                        let config = crate::QueryConstrainedConfig::builder().build();
+                        let service = crate::QueryConstrained::builder(config)
+                            .constrained_primitive_input(constrained_input_handler)
+                            .build_unchecked();
+
+                        // attributes has @length(min: 1, max: 2); sending 3 entries violates the constraint
+                        let request_body = b"Action=ConstrainedPrimitiveInput&Version=2020-01-08&durationSeconds=3600&attributes.entry.1.key=first&attributes.entry.1.value=alpha&attributes.entry.2.key=second&attributes.entry.2.value=beta&attributes.entry.3.key=third&attributes.entry.3.value=gamma".to_vec();
+                        let request = #{Http}::Request::builder()
+                            .uri("/")
+                            .method("POST")
+                            .header("content-type", "application/x-www-form-urlencoded")
+                            .body(#{CreateBody:W})
+                            .expect("failed to build request");
+
+                        let response = #{Tower}::ServiceExt::oneshot(service, request)
+                            .await
+                            .expect("failed to call service");
+                        assert_eq!(response.status(), #{Http}::StatusCode::BAD_REQUEST);
+                        """,
+                        *codegenScope,
+                        "CreateBody" to ServerHttpTestHelpers.createBodyFromBytes(codegenContext, "request_body"),
+                    )
+                }
+
+                tokioTest("constrained_union_variant_rejects_out_of_range") {
+                    rustTemplate(
+                        """
+                        let config = crate::QueryConstrainedConfig::builder().build();
+                        let service = crate::QueryConstrained::builder(config)
+                            .constrained_primitive_input(constrained_input_handler)
+                            .build_unchecked();
+
+                        // variant.number=-1 sets the ConstrainedVariant::number variant with a value that
+                        // violates @range(min: 1) on DurationSecondsType
+                        let request_body = b"Action=ConstrainedPrimitiveInput&Version=2020-01-08&variant.number=-1".to_vec();
+                        let request = #{Http}::Request::builder()
+                            .uri("/")
+                            .method("POST")
+                            .header("content-type", "application/x-www-form-urlencoded")
+                            .body(#{CreateBody:W})
+                            .expect("failed to build request");
+
+                        let response = #{Tower}::ServiceExt::oneshot(service, request)
+                            .await
+                            .expect("failed to call service");
+                        assert_eq!(response.status(), #{Http}::StatusCode::BAD_REQUEST);
+                        """,
+                        *codegenScope,
+                        "CreateBody" to ServerHttpTestHelpers.createBodyFromBytes(codegenContext, "request_body"),
                     )
                 }
             }
