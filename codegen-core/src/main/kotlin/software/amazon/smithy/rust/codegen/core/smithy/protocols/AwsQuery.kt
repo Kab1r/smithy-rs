@@ -37,7 +37,7 @@ class AwsQueryBindingResolver(private val model: Model) :
     }
 }
 
-class AwsQueryProtocol(private val codegenContext: CodegenContext) : Protocol {
+open class AwsQueryProtocol(private val codegenContext: CodegenContext) : Protocol {
     private val runtimeConfig = codegenContext.runtimeConfig
     private val awsQueryErrors: RuntimeType = RuntimeType.wrappedXmlErrors(runtimeConfig)
     private val errorScope =
