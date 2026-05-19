@@ -238,20 +238,18 @@ impl IntoResponse<AwsQuery> for Error {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::Infallible;
-
-    use bytes::Bytes;
     use http::{Method, Request, StatusCode};
     use http_body_util::Full;
     use pretty_assertions::assert_eq;
-    use tower::Service;
 
     use super::*;
-    use crate::body::BoxBody;
-    use crate::routing::Router;
+
+    type TestHandler = fn(
+        Request<QueryBody<Full<Bytes>>>,
+    ) -> std::future::Ready<Result<http::Response<BoxBody>, Infallible>>;
 
     /// Build a router with two well-known operations.
-    fn make_router() -> AwsQueryRouter<tower::util::ServiceFn<fn(Request<QueryBody<Full<Bytes>>>) -> std::future::Ready<Result<http::Response<BoxBody>, Infallible>>>> {
+    fn make_router() -> AwsQueryRouter<tower::util::ServiceFn<TestHandler>> {
         fn handler(
             _req: Request<QueryBody<Full<Bytes>>>,
         ) -> std::future::Ready<Result<http::Response<BoxBody>, Infallible>> {
@@ -261,8 +259,8 @@ mod tests {
                 .unwrap()))
         }
         AwsQueryRouter::from_iter([
-            ("DescribeFoo", tower::service_fn(handler as fn(_) -> _)),
-            ("ListBar", tower::service_fn(handler as fn(_) -> _)),
+            ("DescribeFoo", tower::service_fn(handler as TestHandler)),
+            ("ListBar", tower::service_fn(handler as TestHandler)),
         ])
     }
 
@@ -273,6 +271,15 @@ mod tests {
             .uri("/")
             .header(http::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(Full::from(Bytes::from_static(body.as_bytes())))
+            .unwrap()
+    }
+
+    /// Build a GET request with an empty body.
+    fn get(uri: &'static str) -> Request<Full<Bytes>> {
+        Request::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .body(Full::new(Bytes::new()))
             .unwrap()
     }
 
@@ -309,13 +316,9 @@ mod tests {
     #[tokio::test]
     async fn rejects_non_post() {
         let router = make_router();
-        // Construct a GET request; match_route should reject it immediately.
-        let req: Request<Full<Bytes>> = Request::builder()
-            .method(Method::GET)
-            .uri("/")
-            .body(Full::from(Bytes::from_static(b"Action=DescribeFoo")))
-            .unwrap();
-        let err = router.match_route(&req).unwrap_err();
-        assert_eq!(err.to_string(), Error::MethodNotAllowed.to_string());
+        // GET request; match_route should reject it immediately.
+        let request = get("/");
+        let err = router.match_route(&request).unwrap_err();
+        assert!(matches!(err, Error::MethodNotAllowed), "got {err:?}");
     }
 }
