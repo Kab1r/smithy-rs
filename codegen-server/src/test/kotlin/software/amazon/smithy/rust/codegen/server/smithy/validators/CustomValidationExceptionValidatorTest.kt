@@ -725,6 +725,242 @@ class CustomValidationExceptionValidatorTest {
         relevant[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$extraField")
     }
 
+    // ── New tests added to reject incompatible target shape types ────────────────────────────────
+
+    @Test
+    fun `should emit ERROR when validationExceptionMemberDefault is applied to a map-targeted member`() {
+        val exception =
+            shouldThrow<ValidatedResultException> {
+                """
+                namespace test
+                use smithy.framework.rust#validationException
+                use smithy.framework.rust#validationExceptionMemberDefault
+                use smithy.framework.rust#validationMessage
+
+                @validationException
+                @error("client")
+                structure ValidationError {
+                    @validationMessage
+                    message: String,
+
+                    @validationExceptionMemberDefault("{}")
+                    context: ContextMap
+                }
+
+                map ContextMap {
+                    key: String
+                    value: String
+                }
+                """.asSmithyModel(smithyVersion = "2")
+            }
+
+        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+        val relevant = events.filter { it.id == "ValidationExceptionMemberDefault.IncompatibleTargetType" }
+        relevant shouldHaveSize 1
+        relevant[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$context")
+    }
+
+    @Test
+    fun `should emit ERROR when validationExceptionMemberDefault is applied to a list-targeted member`() {
+        val exception =
+            shouldThrow<ValidatedResultException> {
+                """
+                namespace test
+                use smithy.framework.rust#validationException
+                use smithy.framework.rust#validationExceptionMemberDefault
+                use smithy.framework.rust#validationMessage
+
+                @validationException
+                @error("client")
+                structure ValidationError {
+                    @validationMessage
+                    message: String,
+
+                    @validationExceptionMemberDefault("[]")
+                    tags: TagList
+                }
+
+                list TagList {
+                    member: String
+                }
+                """.asSmithyModel(smithyVersion = "2")
+            }
+
+        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+        val relevant = events.filter { it.id == "ValidationExceptionMemberDefault.IncompatibleTargetType" }
+        relevant shouldHaveSize 1
+        relevant[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$tags")
+    }
+
+    @Test
+    fun `should emit ERROR when validationExceptionMemberDefault is applied to a blob-targeted member`() {
+        val exception =
+            shouldThrow<ValidatedResultException> {
+                """
+                namespace test
+                use smithy.framework.rust#validationException
+                use smithy.framework.rust#validationExceptionMemberDefault
+                use smithy.framework.rust#validationMessage
+
+                @validationException
+                @error("client")
+                structure ValidationError {
+                    @validationMessage
+                    message: String,
+
+                    @validationExceptionMemberDefault("data")
+                    payload: Blob
+                }
+                """.asSmithyModel(smithyVersion = "2")
+            }
+
+        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+        val relevant = events.filter { it.id == "ValidationExceptionMemberDefault.IncompatibleTargetType" }
+        relevant shouldHaveSize 1
+        relevant[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$payload")
+    }
+
+    @Test
+    fun `should emit ERROR when validationExceptionMemberDefault is applied to a structure-targeted member`() {
+        val exception =
+            shouldThrow<ValidatedResultException> {
+                """
+                namespace test
+                use smithy.framework.rust#validationException
+                use smithy.framework.rust#validationExceptionMemberDefault
+                use smithy.framework.rust#validationMessage
+
+                @validationException
+                @error("client")
+                structure ValidationError {
+                    @validationMessage
+                    message: String,
+
+                    @validationExceptionMemberDefault("{}")
+                    detail: ErrorDetail
+                }
+
+                structure ErrorDetail {
+                    code: String
+                }
+                """.asSmithyModel(smithyVersion = "2")
+            }
+
+        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+        val relevant = events.filter { it.id == "ValidationExceptionMemberDefault.IncompatibleTargetType" }
+        relevant shouldHaveSize 1
+        relevant[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$detail")
+    }
+
+    @Test
+    fun `should accept validationExceptionMemberDefault on a string-targeted member`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationExceptionMemberDefault
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                @validationExceptionMemberDefault("someValue")
+                code: String
+            }
+            """.asSmithyModel(smithyVersion = "2")
+
+        val events =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.ERROR && it.id == "ValidationExceptionMemberDefault.IncompatibleTargetType" }
+        events shouldHaveSize 0
+    }
+
+    @Test
+    fun `should accept validationExceptionMemberDefault on a number-targeted member`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationExceptionMemberDefault
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                @validationExceptionMemberDefault("42")
+                count: Integer
+            }
+            """.asSmithyModel(smithyVersion = "2")
+
+        val events =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.ERROR && it.id == "ValidationExceptionMemberDefault.IncompatibleTargetType" }
+        events shouldHaveSize 0
+    }
+
+    @Test
+    fun `should accept validationExceptionMemberDefault on a boolean-targeted member`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationExceptionMemberDefault
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                @validationExceptionMemberDefault("true")
+                retryable: Boolean
+            }
+            """.asSmithyModel(smithyVersion = "2")
+
+        val events =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.ERROR && it.id == "ValidationExceptionMemberDefault.IncompatibleTargetType" }
+        events shouldHaveSize 0
+    }
+
+    @Test
+    fun `should accept validationExceptionMemberDefault on an enum-targeted member`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationExceptionMemberDefault
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                @validationExceptionMemberDefault("fieldValidationFailed")
+                reason: ValidationExceptionReason
+            }
+
+            enum ValidationExceptionReason {
+                FIELD_VALIDATION_FAILED = "fieldValidationFailed"
+                OTHER = "other"
+            }
+            """.asSmithyModel(smithyVersion = "2")
+
+        val events =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.ERROR && it.id == "ValidationExceptionMemberDefault.IncompatibleTargetType" }
+        events shouldHaveSize 0
+    }
+
     // Note: Test #7 from the task plan (should emit WARNING when @pattern regex cannot be compiled) cannot
     // be expressed via the normal asSmithyModel() path because smithy.api#PatternTrait eagerly compiles
     // the pattern in its constructor and throws a SourceException for malformed patterns before the model

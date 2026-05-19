@@ -5,6 +5,7 @@
 
 package software.amazon.smithy.rust.codegen.server.smithy.customizations
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
@@ -16,6 +17,8 @@ import software.amazon.smithy.framework.rust.ValidationMessageTrait
 import software.amazon.smithy.model.Model
 import software.amazon.smithy.model.shapes.ShapeId
 import software.amazon.smithy.model.shapes.StructureShape
+import software.amazon.smithy.model.validation.Severity
+import software.amazon.smithy.model.validation.ValidatedResultException
 import software.amazon.smithy.rust.codegen.core.testutil.asSmithyModel
 import software.amazon.smithy.rust.codegen.server.smithy.testutil.HttpTestType
 import software.amazon.smithy.rust.codegen.server.smithy.testutil.serverIntegrationTest
@@ -1059,5 +1062,63 @@ internal class UserProvidedValidationExceptionDecoratorTest {
         val generatedServers = serverIntegrationTest(modelWithFieldOnlyButNoCustomException, testCoverage = HttpTestType.Default)
         val modelRs = generatedServers.single().path.resolve("src/model.rs").toFile().readText()
         Regex("""pub struct ValidationExceptionField\b""").findAll(modelRs).count() shouldBe 1
+    }
+
+    // ── Regression test: validator blocks @validationExceptionMemberDefault on map-targeted member ──
+
+    @Test
+    fun `model with validationExceptionMemberDefault on a map-targeted member is rejected by the validator`() {
+        // Belt-and-suspenders: confirm that the validator fires and prevents even model assembly,
+        // so the broken decorator codegen is never attempted.
+        val exception =
+            shouldThrow<ValidatedResultException> {
+                """
+                namespace com.aws.example
+
+                use aws.protocols#restJson1
+                use smithy.framework.rust#validationException
+                use smithy.framework.rust#validationExceptionMemberDefault
+                use smithy.framework.rust#validationMessage
+
+                @restJson1
+                service CustomValidationExample {
+                    version: "1.0.0"
+                    operations: [TestOperation]
+                    errors: [MyCustomValidationException]
+                }
+
+                @http(method: "POST", uri: "/test")
+                operation TestOperation {
+                    input: TestInput
+                }
+
+                structure TestInput {
+                    @required
+                    @length(min: 1, max: 10)
+                    name: String
+                }
+
+                @error("client")
+                @httpError(400)
+                @validationException
+                structure MyCustomValidationException {
+                    @validationMessage
+                    message: String
+
+                    @validationExceptionMemberDefault("{}")
+                    context: ExceptionContext
+                }
+
+                map ExceptionContext {
+                    key: String
+                    value: String
+                }
+                """.asSmithyModel(smithyVersion = "2.0")
+            }
+
+        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+        val relevant = events.filter { it.id == "ValidationExceptionMemberDefault.IncompatibleTargetType" }
+        relevant.size shouldBe 1
+        relevant[0].shapeId.get() shouldBe ShapeId.from("com.aws.example#MyCustomValidationException\$context")
     }
 }

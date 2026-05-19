@@ -144,6 +144,13 @@ class CustomValidationExceptionValidator : AbstractValidator() {
                         )
                     }
 
+                // Validate @validationExceptionMemberDefault on every member unconditionally.
+                // This check must run regardless of whether the structure reaches a constrained shape,
+                // because the trait can be applied to members targeting any shape type — including
+                // unconstrained maps, lists, blobs, etc. that wouldn't trigger the constrained-shape
+                // path below.
+                shape.members().forEach { member -> member.validateValidationExceptionMemberDefault(model, events) }
+
                 // Validate default constructibility if it contains constrained shapes
                 if (shape.canReachConstrainedShapeForValidation(model)) {
                     shape.members().forEach { member -> member.validateDefaultConstructibility(model, events) }
@@ -173,7 +180,8 @@ class CustomValidationExceptionValidator : AbstractValidator() {
                 val member = this.asMemberShape().get()
                 val isCanonicalValidationExceptionMember =
                     member.isValidationMessage() || member.hasTrait(ValidationFieldListTrait.ID)
-                member.validateValidationExceptionMemberDefault(model, events)
+                // Note: validateValidationExceptionMemberDefault is called unconditionally at the top
+                // level for every VE member, so we do not repeat it here.
                 // We want to check if the member's target is constrained. If so, we want the default trait to be on the
                 // member.
                 if (!isCanonicalValidationExceptionMember &&
@@ -203,6 +211,33 @@ class CustomValidationExceptionValidator : AbstractValidator() {
         val member = this.asMemberShape().get()
         val value = trait.toNode().expectStringNode().value
         val target = member.targetOrSelf(model)
+
+        // Check that the target shape type is one that can be represented as a string literal default.
+        // Supported types: string, numeric types, boolean, enum, and intEnum.
+        // Unsupported types (map, list, set, blob, structure, union, document, timestamp, etc.) cannot be
+        // expressed as a string literal and will produce broken Rust code if the decorator emits them.
+        val supportedType =
+            target.isStringShape ||
+                target is NumberShape ||
+                target.type == ShapeType.BOOLEAN ||
+                target.isEnumShape ||
+                target.type == ShapeType.INT_ENUM ||
+                target.hasTrait<EnumTrait>()
+        if (!supportedType) {
+            events.add(
+                ValidationEvent.builder()
+                    .id("ValidationExceptionMemberDefault.IncompatibleTargetType")
+                    .severity(Severity.ERROR)
+                    .shape(this)
+                    .message(
+                        "Member `${member.id}` carries @validationExceptionMemberDefault but its target shape " +
+                            "`${target.id}` is a ${target.type} — only string, number, boolean, and enum targets " +
+                            "can be represented as a string literal default. Remove the " +
+                            "@validationExceptionMemberDefault trait or change the target shape type.",
+                    ).build(),
+            )
+            return
+        }
 
         val isValid =
             when {

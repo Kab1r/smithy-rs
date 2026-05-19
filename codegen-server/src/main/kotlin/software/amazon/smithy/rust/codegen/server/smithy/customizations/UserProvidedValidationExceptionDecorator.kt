@@ -709,12 +709,18 @@ class UserProvidedValidationExceptionConversionGenerator(
                     }
                 }
 
-                node.isStringNode ->
+                node.isStringNode && targetShape.isStringShape -> {
+                    // String-typed default on a string-typed target — emit as a Rust string literal,
+                    // wrapping in the constrained newtype if needed and Some(...) for optional members.
+                    // Guard: only fire for actual string-shape targets. Any other target type (map, list,
+                    // blob, structure, etc.) with a string-node default is rejected by the validator, but
+                    // this guard ensures we still produce *compiling* code if validation is ever bypassed.
                     member.wrapValueIfOptional(
                         member.wrapValueInTargetTypeIfConstrained(
                             """"${node.expectStringNode().value}".to_string()""",
                         ),
                     )
+                }
                 node.isBooleanNode -> member.wrapValueIfOptional(node.expectBooleanNode().value.toString())
                 node.isNumberNode -> member.wrapValueIfOptional(node.expectNumberNode().value.toString())
                 else -> member.fallbackDefault()
