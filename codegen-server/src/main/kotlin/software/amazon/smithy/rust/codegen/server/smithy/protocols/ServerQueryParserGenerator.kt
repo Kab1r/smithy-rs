@@ -6,6 +6,7 @@
 package software.amazon.smithy.rust.codegen.server.smithy.protocols
 
 import software.amazon.smithy.aws.traits.protocols.Ec2QueryNameTrait
+import software.amazon.smithy.codegen.core.CodegenException
 import software.amazon.smithy.model.shapes.BigDecimalShape
 import software.amazon.smithy.model.shapes.BigIntegerShape
 import software.amazon.smithy.model.shapes.BlobShape
@@ -90,7 +91,7 @@ abstract class ServerQueryParserGenerator(
     protected open fun emptyListMarkerIsSerialized(member: MemberShape): Boolean = !member.isFlattened()
 
     override fun payloadParser(member: MemberShape): RuntimeType {
-        throw software.amazon.smithy.codegen.core.CodegenException(
+        throw CodegenException(
             "Operation member `${member.id}` is bound via @httpPayload, but $protocolName does not support " +
                 "payload-bound members on the server side. Remove the @httpPayload trait or migrate the operation " +
                 "to a structured protocol (awsJson/restJson1/restXml).",
@@ -232,7 +233,7 @@ abstract class ServerQueryParserGenerator(
                     )
                 is UnionShape -> rust("#T(&pairs, $prefixExpression)?", unionParser(target))
                 else ->
-                    throw software.amazon.smithy.codegen.core.CodegenException(
+                    throw CodegenException(
                         "Member `${member.id}` targets shape `${target.id}` of type `${target.type}`, which " +
                             "$protocolName does not support on the server side. Supported targets: string, " +
                             "boolean, number, timestamp, blob, bigInteger, bigDecimal, structure, list, set, map, union.",
@@ -303,7 +304,7 @@ abstract class ServerQueryParserGenerator(
                     requestRejection,
                 )
             else ->
-                throw software.amazon.smithy.codegen.core.CodegenException(
+                throw CodegenException(
                     "Member `${member.id}` targets scalar shape `${target.id}` of unsupported type `${target.type}`. " +
                         "$protocolName scalar members must be string, boolean, number, timestamp, blob, bigInteger, or bigDecimal.",
                 )
