@@ -521,6 +521,129 @@ internal class ValidateUnsupportedConstraintsAreNotUsedTest {
     }
 
     @Test
+    fun `it should reject sparse collections nested under a structure member in awsQuery services`() {
+        val model =
+            """
+            namespace test
+
+            use aws.protocols#awsQuery
+            use smithy.api#xmlNamespace
+            use smithy.api#sparse
+
+            @awsQuery
+            @xmlNamespace(uri: "https://example.com/")
+            service Svc {
+                version: "2020-01-08",
+                operations: [Op]
+            }
+
+            operation Op {
+                input: OpInput
+                output: OpOutput
+            }
+
+            structure OpInput {
+                nested: NestedStruct
+            }
+
+            structure OpOutput {}
+
+            structure NestedStruct {
+                items: SparseList
+            }
+
+            @sparse
+            list SparseList {
+                member: String
+            }
+            """.asSmithyModel()
+        val validationResult = validateQueryModel(model)
+
+        validationResult.shouldAbort shouldBe true
+        validationResult.messages shouldHaveSize 1
+        validationResult.messages.first().level shouldBe Level.SEVERE
+        validationResult.messages.first().message shouldContain "SparseList"
+    }
+
+    @Test
+    fun `it should reject sparse collections in ec2Query services`() {
+        val model =
+            """
+            namespace test
+
+            use aws.protocols#ec2Query
+            use smithy.api#xmlNamespace
+            use smithy.api#sparse
+
+            @ec2Query
+            @xmlNamespace(uri: "https://example.com/")
+            service Svc {
+                version: "2016-11-15",
+                operations: [Op]
+            }
+
+            operation Op {
+                input: OpInput
+                output: OpOutput
+            }
+
+            structure OpInput {
+                items: SparseList
+            }
+
+            structure OpOutput {}
+
+            @sparse
+            list SparseList {
+                member: String
+            }
+            """.asSmithyModel()
+        val validationResult = validateQueryModel(model)
+
+        validationResult.shouldAbort shouldBe true
+        validationResult.messages shouldHaveSize 1
+        validationResult.messages.first().level shouldBe Level.SEVERE
+    }
+
+    @Test
+    fun `it should not flag sparse collections in non-query services`() {
+        val model =
+            """
+            namespace test
+
+            use aws.protocols#restJson1
+            use smithy.api#sparse
+
+            @restJson1
+            service Svc {
+                version: "2020-01-08",
+                operations: [Op]
+            }
+
+            @http(method: "POST", uri: "/op")
+            operation Op {
+                input: OpInput
+                output: OpOutput
+            }
+
+            structure OpInput {
+                items: SparseList
+            }
+
+            structure OpOutput {}
+
+            @sparse
+            list SparseList {
+                member: String
+            }
+            """.asSmithyModel()
+        val validationResult = validateQueryModel(model)
+
+        validationResult.shouldAbort shouldBe false
+        validationResult.messages shouldHaveSize 0
+    }
+
+    @Test
     fun `it should detect default validation exception in operation when custom validation exception is defined`() {
         val model =
             """
