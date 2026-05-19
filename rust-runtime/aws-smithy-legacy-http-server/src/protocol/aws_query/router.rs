@@ -242,3 +242,89 @@ impl IntoResponse<AwsQuery> for Error {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use http::{Method, Request, StatusCode};
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    type TestHandler = fn(
+        Request<QueryBody<hyper::Body>>,
+    ) -> std::future::Ready<Result<http::Response<BoxBody>, Infallible>>;
+
+    /// Build a router with two well-known operations.
+    fn make_router() -> AwsQueryRouter<tower::util::ServiceFn<TestHandler>> {
+        fn handler(
+            _req: Request<QueryBody<hyper::Body>>,
+        ) -> std::future::Ready<Result<http::Response<BoxBody>, Infallible>> {
+            std::future::ready(Ok(http::Response::builder()
+                .status(StatusCode::OK)
+                .body(crate::body::to_boxed("ok"))
+                .unwrap()))
+        }
+        AwsQueryRouter::from_iter([
+            ("DescribeFoo", tower::service_fn(handler as TestHandler)),
+            ("ListBar", tower::service_fn(handler as TestHandler)),
+        ])
+    }
+
+    /// Build a POST request with a URL-encoded body.
+    fn post(body: &'static str) -> Request<hyper::Body> {
+        Request::builder()
+            .method(Method::POST)
+            .uri("/")
+            .header(http::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(hyper::Body::from(body))
+            .unwrap()
+    }
+
+    /// Build a GET request with an empty body.
+    fn get(uri: &'static str) -> Request<hyper::Body> {
+        Request::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .body(hyper::Body::empty())
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn routes_known_action() {
+        let router = make_router();
+        let req = post("Action=DescribeFoo&Version=2010-05-08");
+        // match_route validates URI + method; the service call resolves the action.
+        let mut route = router.match_route(&req).unwrap();
+        let resp = route.call(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn rejects_missing_action() {
+        let router = make_router();
+        let req = post("Version=2010-05-08");
+        let mut route = router.match_route(&req).unwrap();
+        let resp = route.call(req).await.unwrap();
+        // MissingAction → 404 NOT_FOUND via IntoResponse
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn rejects_unknown_action() {
+        let router = make_router();
+        let req = post("Action=DoesNotExist&Version=2010-05-08");
+        let mut route = router.match_route(&req).unwrap();
+        let resp = route.call(req).await.unwrap();
+        // Unknown action → 404 NOT_FOUND via IntoResponse
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn rejects_non_post() {
+        let router = make_router();
+        // GET request; match_route should reject it immediately.
+        let request = get("/");
+        let err = router.match_route(&request).unwrap_err();
+        assert!(matches!(err, Error::MethodNotAllowed), "got {err:?}");
+    }
+}
