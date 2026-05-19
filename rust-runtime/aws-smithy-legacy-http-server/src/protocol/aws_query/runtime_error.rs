@@ -64,9 +64,11 @@ impl IntoResponse<AwsQuery> for RuntimeError {
         let name = self.name();
         let body = format!(
             // TODO(awsQuery request id): the awsQuery protocol response envelope requires a
-            // RequestId. Until the framework provides one (e.g. via a per-request extension), we
-            // emit `unknown` rather than synthesise a fake. Clients should not treat this value
-            // as meaningful.
+            // RequestId. The framework already provides `ServerRequestId` (see
+            // `crate::request::request_id`) which generates a UUID-v4 per request via
+            // `ServerRequestIdProviderLayer`. The remaining work is threading that extension
+            // into `RuntimeError::into_response` so it can be embedded in the envelope below.
+            // Until then we emit `unknown`; clients should not treat this value as meaningful.
             "<ErrorResponse><Error><Type>Sender</Type><Code>{}</Code><Message>{}</Message></Error><RequestId>unknown</RequestId></ErrorResponse>",
             xml_escape(name),
             xml_escape(&self.message()),

@@ -63,7 +63,12 @@ impl IntoResponse<Ec2Query> for RuntimeError {
     fn into_response(self) -> http::Response<crate::body::BoxBody> {
         let name = self.name();
         let body = format!(
-            // TODO(ec2Query request id): see corresponding note in aws_query/runtime_error.rs.
+            // TODO(ec2Query request id): the ec2Query protocol response envelope requires a
+            // RequestID. The framework already provides `ServerRequestId` (see
+            // `crate::request::request_id`) which generates a UUID-v4 per request via
+            // `ServerRequestIdProviderLayer`. The remaining work is threading that extension
+            // into `RuntimeError::into_response` so it can be embedded in the envelope below.
+            // Until then we emit `unknown`; clients should not treat this value as meaningful.
             "<Response><Errors><Error><Code>{}</Code><Message>{}</Message></Error></Errors><RequestID>unknown</RequestID></Response>",
             xml_escape(name),
             xml_escape(&self.message()),
