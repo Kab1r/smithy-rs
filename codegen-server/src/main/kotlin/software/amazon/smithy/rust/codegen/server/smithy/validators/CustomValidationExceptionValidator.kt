@@ -118,6 +118,25 @@ class CustomValidationExceptionValidator : AbstractValidator() {
                         )
                     }
 
+                shape.members()
+                    .filter {
+                        (it.memberName == "fieldList" || it.memberName == "field_list") &&
+                            !it.hasTrait(ValidationFieldListTrait.ID)
+                    }
+                    .forEach { member ->
+                        events.add(
+                            ValidationEvent.builder()
+                                .id("CustomValidationException.ImplicitFieldListField")
+                                .severity(Severity.WARNING)
+                                .shape(member)
+                                .message(
+                                    "Member \"${member.memberName}\" is treated as the validation field list by " +
+                                        "name convention. Apply the @validationFieldList trait explicitly to " +
+                                        "avoid relying on the implicit name fallback.",
+                                ).build(),
+                        )
+                    }
+
                 // Validate default constructibility if it contains constrained shapes
                 if (shape.canReachConstrainedShapeForValidation(model)) {
                     shape.members().forEach { member -> member.validateDefaultConstructibility(model, events) }

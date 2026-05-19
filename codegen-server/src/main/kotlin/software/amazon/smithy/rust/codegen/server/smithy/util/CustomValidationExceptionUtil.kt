@@ -6,6 +6,7 @@
 package software.amazon.smithy.rust.codegen.server.smithy.util
 
 import software.amazon.smithy.codegen.core.SymbolProvider
+import software.amazon.smithy.framework.rust.ValidationFieldListTrait
 import software.amazon.smithy.framework.rust.ValidationFieldNameTrait
 import software.amazon.smithy.framework.rust.ValidationMessageTrait
 import software.amazon.smithy.model.Model
@@ -91,8 +92,12 @@ fun resolveValidationExceptionFieldIdentifiers(
         model.getShape(frameworkExceptionId).orNull()
             as? StructureShape
             ?: return ValidationExceptionFieldIdentifiers.DEFAULT
+    // Prefer @validationFieldList; fall back to the canonical names for backward compatibility
+    // with models that haven't been annotated. CustomValidationExceptionValidator emits a WARNING
+    // when the fallback path is hit so users are nudged toward the trait.
     val fieldListMember =
-        exception.members().firstOrNull { it.memberName == "fieldList" || it.memberName == "field_list" }
+        exception.members().firstOrNull { it.hasTrait(ValidationFieldListTrait.ID) }
+            ?: exception.members().firstOrNull { it.memberName == "fieldList" || it.memberName == "field_list" }
             ?: return ValidationExceptionFieldIdentifiers.DEFAULT
     val fieldList =
         model.getShape(fieldListMember.target).orNull() as? ListShape

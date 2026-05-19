@@ -441,4 +441,74 @@ class CustomValidationExceptionValidatorTest {
         events[0].id shouldBe "CustomValidationException.MissingDefault"
         events[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$extraField")
     }
+
+    // ── New tests added by Task 14 ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `should emit WARNING when field-list member relies on canonical name fallback without trait`() {
+        // Fixture: a VE with a member literally named "fieldList" without @validationFieldList.
+        // The validator walks @validationException structures and emits an
+        // ImplicitFieldListField WARNING for "fieldList" or "field_list" members that lack the trait.
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                fieldList: SomeList
+            }
+
+            list SomeList {
+                member: SomeField
+            }
+
+            structure SomeField {
+                name: String
+            }
+            """.asSmithyModel(smithyVersion = "2")
+        val warnings =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.WARNING && it.id == "CustomValidationException.ImplicitFieldListField" }
+        warnings shouldHaveSize 1
+        warnings[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$fieldList")
+    }
+
+    @Test
+    fun `should NOT emit WARNING when field-list member carries the explicit validationFieldList trait`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationFieldList
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                @validationFieldList
+                fieldList: SomeList
+            }
+
+            list SomeList {
+                member: SomeField
+            }
+
+            structure SomeField {
+                name: String
+            }
+            """.asSmithyModel(smithyVersion = "2")
+        val warnings =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.WARNING && it.id == "CustomValidationException.ImplicitFieldListField" }
+        warnings shouldHaveSize 0
+    }
 }
