@@ -53,8 +53,8 @@ private fun ec2HttpBindingResolver(codegenContext: ServerCodegenContext): HttpBi
  * Protocol support flags for awsQuery and ec2Query server codegen.
  *
  * Both protocols are request-only on the server: requests arrive as form-urlencoded bodies that
- * the server parses, and responses are emitted as XML through the same serializers the *client*
- * uses to parse them. Consequently `responseDeserialization`/`errorDeserialization` are false
+ * the server parses, and responses are emitted as XML in the same wire format the *client*'s
+ * codegen-core parsers consume. Consequently `responseDeserialization`/`errorDeserialization` are false
  * (the server never parses responses) and `requestSerialization`/`requestBodySerialization` on
  * the client half are also false because client-side awsQuery/ec2Query are handled by the
  * existing codegen-core generators, not these server-side factories.
@@ -129,10 +129,11 @@ class ServerAwsQueryProtocol(
     override fun serverRouterRuntimeConstructor(): String = "new_aws_query_router"
 
     /**
-     * Routing key used by [AwsQueryRouter]. awsQuery requests carry `Action=<OperationName>` in the
+     * Routing key used by `AwsQueryRouter`. awsQuery requests carry `Action=<OperationName>` in the
      * form-urlencoded body and are *not* namespaced by service. This means an `AwsQueryRouter`
-     * instance can serve at most one service: two services sharing an operation name would collide
-     * silently in the router's TinyMap. This is a protocol-spec consequence, not a router bug.
+     * instance can serve at most one service: if two services share an operation name, one handler
+     * silently shadows the other in the router's `TinyMap`. This is a protocol-spec consequence,
+     * not a router bug.
      */
     override fun serverRouterRequestSpec(
         operationShape: OperationShape,
@@ -192,10 +193,11 @@ class ServerEc2QueryProtocol(
     override fun serverRouterRuntimeConstructor(): String = "new_ec2_query_router"
 
     /**
-     * Routing key used by [Ec2QueryRouter]. ec2Query requests carry `Action=<OperationName>` in the
+     * Routing key used by `Ec2QueryRouter`. ec2Query requests carry `Action=<OperationName>` in the
      * form-urlencoded body and are *not* namespaced by service. This means an `Ec2QueryRouter`
-     * instance can serve at most one service: two services sharing an operation name would collide
-     * silently in the router's TinyMap. This is a protocol-spec consequence, not a router bug.
+     * instance can serve at most one service: if two services share an operation name, one handler
+     * silently shadows the other in the router's `TinyMap`. This is a protocol-spec consequence,
+     * not a router bug.
      */
     override fun serverRouterRequestSpec(
         operationShape: OperationShape,
