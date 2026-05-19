@@ -8,7 +8,6 @@ package software.amazon.smithy.rust.codegen.server.smithy.protocols
 import software.amazon.smithy.aws.traits.protocols.AwsQueryErrorTrait
 import software.amazon.smithy.model.pattern.UriPattern
 import software.amazon.smithy.model.shapes.OperationShape
-import software.amazon.smithy.model.shapes.ShapeId
 import software.amazon.smithy.model.shapes.StructureShape
 import software.amazon.smithy.model.traits.HttpTrait
 import software.amazon.smithy.model.traits.TimestampFormatTrait
@@ -19,7 +18,6 @@ import software.amazon.smithy.rust.codegen.core.rustlang.writable
 import software.amazon.smithy.rust.codegen.core.smithy.RuntimeType
 import software.amazon.smithy.rust.codegen.core.smithy.generators.http.HttpBindingCustomization
 import software.amazon.smithy.rust.codegen.core.smithy.generators.protocol.ProtocolSupport
-import software.amazon.smithy.rust.codegen.core.smithy.protocols.AwsQueryBindingResolver
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.AwsQueryProtocol
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.Ec2QueryProtocol
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.HttpBindingDescriptor
@@ -28,7 +26,6 @@ import software.amazon.smithy.rust.codegen.core.smithy.protocols.Protocol
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.ProtocolGeneratorFactory
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.StaticHttpBindingResolver
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.parse.StructuredDataParserGenerator
-import software.amazon.smithy.rust.codegen.core.smithy.protocols.serialize.AwsQuerySerializerGenerator
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.serialize.Ec2QuerySerializerGenerator
 import software.amazon.smithy.rust.codegen.core.smithy.protocols.serialize.StructuredDataSerializerGenerator
 import software.amazon.smithy.rust.codegen.core.util.dq
@@ -105,27 +102,16 @@ class ServerEc2QueryFactory(
 
 class ServerAwsQueryProtocol(
     private val serverCodegenContext: ServerCodegenContext,
-) : ServerProtocol {
+) : AwsQueryProtocol(serverCodegenContext), ServerProtocol {
     private val runtimeConfig = serverCodegenContext.runtimeConfig
-    private val clientProtocol = AwsQueryProtocol(serverCodegenContext)
 
     override val protocolModulePath: String = "aws_query"
-
-    override val httpBindingResolver: HttpBindingResolver = AwsQueryBindingResolver(serverCodegenContext.model)
-
-    override val defaultTimestampFormat: TimestampFormatTrait.Format = TimestampFormatTrait.Format.DATE_TIME
 
     override fun structuredDataParser(): StructuredDataParserGenerator =
         ServerAwsQueryParserGenerator(serverCodegenContext, this)
 
-    override fun structuredDataSerializer(): StructuredDataSerializerGenerator =
-        AwsQuerySerializerGenerator(serverCodegenContext)
-
-    override fun parseHttpErrorMetadata(operationShape: OperationShape): RuntimeType =
-        clientProtocol.parseHttpErrorMetadata(operationShape)
-
-    override fun parseEventStreamErrorMetadata(operationShape: OperationShape): RuntimeType =
-        clientProtocol.parseEventStreamErrorMetadata(operationShape)
+    // structuredDataSerializer, httpBindingResolver, defaultTimestampFormat,
+    // parseHttpErrorMetadata, parseEventStreamErrorMetadata inherited from AwsQueryProtocol.
 
     override fun markerStruct(): RuntimeType = ServerRuntimeType.protocol("AwsQuery", protocolModulePath, runtimeConfig)
 
