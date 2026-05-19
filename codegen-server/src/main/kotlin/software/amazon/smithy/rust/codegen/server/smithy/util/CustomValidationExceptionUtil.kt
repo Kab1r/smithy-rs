@@ -17,28 +17,42 @@ import software.amazon.smithy.rust.codegen.core.util.orNull
 
 /**
  * Helper function to determine if this [MemberShape] is a validation message either explicitly with the
- * @validationMessage trait or implicitly because it is named "message".
+ * @validationMessage trait or implicitly because it is named "message" (exact lowercase).
  *
- * The name match is case-insensitive: AWS service models for XML-based protocols (awsQuery, restXml)
- * commonly declare the field as PascalCase `Message` to match the wire format. A case-sensitive match
- * aborts those services at smithy-build with `MissingMessageField`.
+ * The name match is exact lowercase only: the case-insensitive fallback was removed because it
+ * silently collides when a model has both `message` and `Message` members, and silently loses the
+ * binding when a user renames `Message` to `ErrorMessage`. Models that use PascalCase or any other
+ * casing must apply the explicit `@validationMessage` trait.
+ *
+ * [CustomValidationExceptionValidator] emits a WARNING when a model relies on this lowercase fallback
+ * rather than the explicit trait.
  */
 fun MemberShape.isValidationMessage(): Boolean {
-    return this.hasTrait(ValidationMessageTrait.ID) || this.memberName.equals("message", ignoreCase = true)
+    if (this.hasTrait(ValidationMessageTrait.ID)) return true
+    // Backward-compat: members literally named `message` (lowercase) are recognised without the
+    // trait. Any other casing or name requires the explicit @validationMessage trait;
+    // CustomValidationExceptionValidator emits a WARNING when a model relies on this fallback.
+    return this.memberName == "message"
 }
 
 /**
  * Helper function to determine if this [MemberShape] is a validation field-name member either explicitly with the
- * @validationFieldName trait or implicitly because it is named "name" or "path".
+ * @validationFieldName trait or implicitly because it is named "name" or "path" (exact lowercase).
  *
  * Both names are recognised: AWS service models conventionally call it `name`, while
- * `smithy.framework#ValidationExceptionField` calls it `path`. The match is case-insensitive so that PascalCase
- * variants (`Name`, `Path`) are also accepted.
+ * `smithy.framework#ValidationExceptionField` calls it `path`. The match is exact lowercase only:
+ * the case-insensitive fallback was removed to avoid silent collisions and silent loss of binding.
+ * Models using PascalCase or any other casing must apply the explicit `@validationFieldName` trait.
+ *
+ * [CustomValidationExceptionValidator] emits a WARNING when a model relies on this lowercase fallback
+ * rather than the explicit trait.
  */
 fun MemberShape.isValidationFieldName(): Boolean {
-    return this.hasTrait(ValidationFieldNameTrait.ID) ||
-        this.memberName.equals("name", ignoreCase = true) ||
-        this.memberName.equals("path", ignoreCase = true)
+    if (this.hasTrait(ValidationFieldNameTrait.ID)) return true
+    // Backward-compat: members literally named `name` or `path` (lowercase) are recognised
+    // without the trait. Any other casing or name requires @validationFieldName; the validator
+    // emits a WARNING when a model relies on this fallback.
+    return this.memberName == "name" || this.memberName == "path"
 }
 
 /**

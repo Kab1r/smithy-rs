@@ -24,6 +24,9 @@ import software.amazon.smithy.rust.codegen.core.util.hasTrait
 import software.amazon.smithy.rust.codegen.core.util.targetOrSelf
 import software.amazon.smithy.rust.codegen.server.smithy.canReachConstrainedShapeForValidation
 import software.amazon.smithy.rust.codegen.server.smithy.isDirectlyConstrainedForValidation
+import software.amazon.smithy.framework.rust.ValidationFieldNameTrait
+import software.amazon.smithy.framework.rust.ValidationMessageTrait
+import software.amazon.smithy.rust.codegen.server.smithy.util.isValidationFieldName
 import software.amazon.smithy.rust.codegen.server.smithy.util.isValidationMessage
 
 class CustomValidationExceptionValidator : AbstractValidator() {
@@ -78,6 +81,43 @@ class CustomValidationExceptionValidator : AbstractValidator() {
                                 ).build(),
                         )
                 }
+
+                // Warn when a model relies on the lowercase name fallback rather than the explicit trait.
+                // This nudges users towards annotating with @validationMessage / @validationFieldName.
+                shape.members()
+                    .filter { it.memberName == "message" && !it.hasTrait(ValidationMessageTrait.ID) }
+                    .forEach { member ->
+                        events.add(
+                            ValidationEvent.builder()
+                                .id("CustomValidationException.ImplicitMessageField")
+                                .severity(Severity.WARNING)
+                                .shape(member)
+                                .message(
+                                    "Member \"${member.memberName}\" is treated as the validation message by " +
+                                        "name convention. Apply the @validationMessage trait explicitly to " +
+                                        "avoid relying on the implicit name fallback.",
+                                ).build(),
+                        )
+                    }
+
+                shape.members()
+                    .filter {
+                        (it.memberName == "name" || it.memberName == "path") &&
+                            !it.hasTrait(ValidationFieldNameTrait.ID)
+                    }
+                    .forEach { member ->
+                        events.add(
+                            ValidationEvent.builder()
+                                .id("CustomValidationException.ImplicitFieldNameField")
+                                .severity(Severity.WARNING)
+                                .shape(member)
+                                .message(
+                                    "Member \"${member.memberName}\" is treated as the validation field name by " +
+                                        "name convention. Apply the @validationFieldName trait explicitly to " +
+                                        "avoid relying on the implicit name fallback.",
+                                ).build(),
+                        )
+                    }
 
                 // Validate default constructibility if it contains constrained shapes
                 if (shape.canReachConstrainedShapeForValidation(model)) {

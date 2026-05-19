@@ -224,17 +224,19 @@ class CustomValidationExceptionValidatorTest {
     @Test
     fun `should accept PascalCase Message as the canonical validation message member`() {
         // awsQuery / restXml AWS service models commonly declare the validation-exception message
-        // member as PascalCase Message to match the wire format. Recognizing the lowercase variant
-        // alone aborted these services at smithy-build with MissingMessageField; the matcher must
-        // accept any case-folded "message" alongside the explicit @validationMessage annotation.
+        // member as PascalCase Message to match the wire format. After tightening, PascalCase
+        // variants require the explicit @validationMessage trait — the fixture was updated to
+        // reflect this while preserving the test's invariant that the VE is accepted.
         """
         namespace test
         use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationMessage
 
         @validationException
         @error("client")
         structure ValidationException {
             Code: String,
+            @validationMessage
             Message: String,
         }
         """.asSmithyModel(smithyVersion = "2")
@@ -242,13 +244,17 @@ class CustomValidationExceptionValidatorTest {
 
     @Test
     fun `should accept uppercase MESSAGE as the canonical validation message member`() {
+        // After tightening, non-lowercase variants require the explicit @validationMessage trait.
+        // The fixture was updated to add the trait while preserving the test's invariant.
         """
         namespace test
         use smithy.framework.rust#validationException
+        use smithy.framework.rust#validationMessage
 
         @validationException
         @error("client")
         structure ValidationException {
+            @validationMessage
             MESSAGE: String,
         }
         """.asSmithyModel(smithyVersion = "2")
@@ -312,6 +318,49 @@ class CustomValidationExceptionValidatorTest {
         events shouldHaveSize 1
         events[0].id shouldBe "ValidationExceptionMemberDefault.InvalidValue"
         events[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError${'$'}reason")
+    }
+
+    // ── New tests added by Tasks 12 + 13 ──────────────────────────────────────────────────────
+
+    @Test
+    fun `should emit WARNING when message member relies on lowercase name fallback without trait`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                message: String
+            }
+            """.asSmithyModel(smithyVersion = "2")
+        val warnings =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.WARNING && it.id == "CustomValidationException.ImplicitMessageField" }
+        warnings shouldHaveSize 1
+        warnings[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$message")
+    }
+
+    @Test
+    fun `should NOT emit WARNING when message member carries the explicit validationMessage trait`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String
+            }
+            """.asSmithyModel(smithyVersion = "2")
+        val warnings =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.WARNING && it.id == "CustomValidationException.ImplicitMessageField" }
+        warnings shouldHaveSize 0
     }
 
     @Test

@@ -28,20 +28,18 @@ class CustomValidationExceptionUtilTest {
             message: String
         }
 
-        @validationException
-        @error("client")
+        // No @validationException here: these structures are used only to test that
+        // isValidationMessage() returns false when the name is non-lowercase and the trait is absent.
+        // Keeping @validationException on them would cause MissingMessageField validator errors
+        // since the non-lowercase variants no longer satisfy the name-only fallback.
         structure WithPascalCaseMessage {
             Message: String
         }
 
-        @validationException
-        @error("client")
         structure WithUppercaseMessage {
             MESSAGE: String
         }
 
-        @validationException
-        @error("client")
         structure WithMixedCaseMessage {
             MeSsAgE: String
         }
@@ -73,6 +71,17 @@ class CustomValidationExceptionUtilTest {
             @validationFieldName
             label: String
         }
+
+        structure WithLowercasePath {
+            path: String
+        }
+
+        @validationException
+        @error("client")
+        structure WithTraitOnPascalCaseMessage {
+            @validationMessage
+            Message: String
+        }
         """.asSmithyModel(smithyVersion = "2")
 
     private fun member(
@@ -92,18 +101,22 @@ class CustomValidationExceptionUtilTest {
     }
 
     @Test
-    fun `isValidationMessage accepts PascalCase Message`() {
-        member("WithPascalCaseMessage", "Message").isValidationMessage() shouldBe true
+    fun `isValidationMessage rejects PascalCase Message without trait`() {
+        // After tightening, only the exact lowercase "message" is recognised by name convention.
+        // PascalCase variants require the explicit @validationMessage trait.
+        member("WithPascalCaseMessage", "Message").isValidationMessage() shouldBe false
     }
 
     @Test
-    fun `isValidationMessage accepts uppercase MESSAGE`() {
-        member("WithUppercaseMessage", "MESSAGE").isValidationMessage() shouldBe true
+    fun `isValidationMessage rejects uppercase MESSAGE without trait`() {
+        // After tightening, only the exact lowercase "message" is recognised by name convention.
+        member("WithUppercaseMessage", "MESSAGE").isValidationMessage() shouldBe false
     }
 
     @Test
-    fun `isValidationMessage accepts mixed case MeSsAgE`() {
-        member("WithMixedCaseMessage", "MeSsAgE").isValidationMessage() shouldBe true
+    fun `isValidationMessage rejects mixed case MeSsAgE without trait`() {
+        // After tightening, any non-lowercase variant requires the explicit @validationMessage trait.
+        member("WithMixedCaseMessage", "MeSsAgE").isValidationMessage() shouldBe false
     }
 
     @Test
@@ -123,8 +136,10 @@ class CustomValidationExceptionUtilTest {
     }
 
     @Test
-    fun `isValidationFieldName accepts PascalCase Name`() {
-        member("WithPascalCaseName", "Name").isValidationFieldName() shouldBe true
+    fun `isValidationFieldName rejects PascalCase Name without trait`() {
+        // After tightening, only the exact lowercase "name" or "path" is recognised by name convention.
+        // PascalCase variants require the explicit @validationFieldName trait.
+        member("WithPascalCaseName", "Name").isValidationFieldName() shouldBe false
     }
 
     @Test
@@ -135,5 +150,22 @@ class CustomValidationExceptionUtilTest {
     @Test
     fun `isValidationFieldName accepts any member name carrying the validationFieldName trait`() {
         member("WithTraitOnNonName", "label").isValidationFieldName() shouldBe true
+    }
+
+    // ── New tests added by Tasks 12 + 13 ──────────────────────────────────────────────────────
+
+    @Test
+    fun `isValidationMessage still accepts lowercase message without trait (backward compat)`() {
+        member("WithLowercaseMessage", "message").isValidationMessage() shouldBe true
+    }
+
+    @Test
+    fun `isValidationMessage accepts PascalCase Message carrying the validationMessage trait`() {
+        member("WithTraitOnPascalCaseMessage", "Message").isValidationMessage() shouldBe true
+    }
+
+    @Test
+    fun `isValidationFieldName still accepts lowercase path without trait (backward compat)`() {
+        member("WithLowercasePath", "path").isValidationFieldName() shouldBe true
     }
 }
