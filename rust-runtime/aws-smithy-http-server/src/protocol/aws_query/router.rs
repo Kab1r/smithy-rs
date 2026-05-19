@@ -235,3 +235,87 @@ impl IntoResponse<AwsQuery> for Error {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::convert::Infallible;
+
+    use bytes::Bytes;
+    use http::{Method, Request, StatusCode};
+    use http_body_util::Full;
+    use pretty_assertions::assert_eq;
+    use tower::Service;
+
+    use super::*;
+    use crate::body::BoxBody;
+    use crate::routing::Router;
+
+    /// Build a router with two well-known operations.
+    fn make_router() -> AwsQueryRouter<tower::util::ServiceFn<fn(Request<QueryBody<Full<Bytes>>>) -> std::future::Ready<Result<http::Response<BoxBody>, Infallible>>>> {
+        fn handler(
+            _req: Request<QueryBody<Full<Bytes>>>,
+        ) -> std::future::Ready<Result<http::Response<BoxBody>, Infallible>> {
+            std::future::ready(Ok(http::Response::builder()
+                .status(StatusCode::OK)
+                .body(crate::body::to_boxed("ok"))
+                .unwrap()))
+        }
+        AwsQueryRouter::from_iter([
+            ("DescribeFoo", tower::service_fn(handler as fn(_) -> _)),
+            ("ListBar", tower::service_fn(handler as fn(_) -> _)),
+        ])
+    }
+
+    /// Build a POST request with a URL-encoded body.
+    fn post(body: &'static str) -> Request<Full<Bytes>> {
+        Request::builder()
+            .method(Method::POST)
+            .uri("/")
+            .header(http::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(Full::from(Bytes::from_static(body.as_bytes())))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn routes_known_action() {
+        let router = make_router();
+        let req = post("Action=DescribeFoo&Version=2010-05-08");
+        // match_route validates URI + method; the service call resolves the action.
+        let mut route = router.match_route(&req).unwrap();
+        let resp = route.call(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn rejects_missing_action() {
+        let router = make_router();
+        let req = post("Version=2010-05-08");
+        let mut route = router.match_route(&req).unwrap();
+        let resp = route.call(req).await.unwrap();
+        // MissingAction → 404 NOT_FOUND via IntoResponse
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn rejects_unknown_action() {
+        let router = make_router();
+        let req = post("Action=DoesNotExist&Version=2010-05-08");
+        let mut route = router.match_route(&req).unwrap();
+        let resp = route.call(req).await.unwrap();
+        // Unknown action → 404 NOT_FOUND via IntoResponse
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn rejects_non_post() {
+        let router = make_router();
+        // Construct a GET request; match_route should reject it immediately.
+        let req: Request<Full<Bytes>> = Request::builder()
+            .method(Method::GET)
+            .uri("/")
+            .body(Full::from(Bytes::from_static(b"Action=DescribeFoo")))
+            .unwrap();
+        let err = router.match_route(&req).unwrap_err();
+        assert_eq!(err.to_string(), Error::MethodNotAllowed.to_string());
+    }
+}
