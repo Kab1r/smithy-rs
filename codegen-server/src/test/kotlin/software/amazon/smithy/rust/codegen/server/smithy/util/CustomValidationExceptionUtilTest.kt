@@ -153,11 +153,8 @@ class CustomValidationExceptionUtilTest {
     }
 
     // ── New tests added by Tasks 12 + 13 ──────────────────────────────────────────────────────
-
-    @Test
-    fun `isValidationMessage still accepts lowercase message without trait (backward compat)`() {
-        member("WithLowercaseMessage", "message").isValidationMessage() shouldBe true
-    }
+    // Note: the lowercase-message backward-compat assertion lives in `isValidationMessage
+    // accepts lowercase message` above; not duplicated here.
 
     @Test
     fun `isValidationMessage accepts PascalCase Message carrying the validationMessage trait`() {

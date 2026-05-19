@@ -8,6 +8,8 @@ package software.amazon.smithy.rust.codegen.server.smithy.validators
 import software.amazon.smithy.framework.rust.ValidationExceptionMemberDefaultTrait
 import software.amazon.smithy.framework.rust.ValidationExceptionTrait
 import software.amazon.smithy.framework.rust.ValidationFieldListTrait
+import software.amazon.smithy.framework.rust.ValidationFieldNameTrait
+import software.amazon.smithy.framework.rust.ValidationMessageTrait
 import software.amazon.smithy.model.Model
 import software.amazon.smithy.model.shapes.Shape
 import software.amazon.smithy.model.shapes.ShapeType
@@ -24,9 +26,6 @@ import software.amazon.smithy.rust.codegen.core.util.hasTrait
 import software.amazon.smithy.rust.codegen.core.util.targetOrSelf
 import software.amazon.smithy.rust.codegen.server.smithy.canReachConstrainedShapeForValidation
 import software.amazon.smithy.rust.codegen.server.smithy.isDirectlyConstrainedForValidation
-import software.amazon.smithy.framework.rust.ValidationFieldNameTrait
-import software.amazon.smithy.framework.rust.ValidationMessageTrait
-import software.amazon.smithy.rust.codegen.server.smithy.util.isValidationFieldName
 import software.amazon.smithy.rust.codegen.server.smithy.util.isValidationMessage
 
 class CustomValidationExceptionValidator : AbstractValidator() {

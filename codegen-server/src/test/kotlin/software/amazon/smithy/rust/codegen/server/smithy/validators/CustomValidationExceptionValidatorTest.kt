@@ -364,6 +364,58 @@ class CustomValidationExceptionValidatorTest {
     }
 
     @Test
+    fun `should emit WARNING when field-name member relies on lowercase name fallback without trait`() {
+        // Fixture: a VE with a member literally named "name" without @validationFieldName.
+        // The validator walks @validationException structures and emits an
+        // ImplicitFieldNameField WARNING for any "name" or "path" member that lacks the trait.
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                name: String
+            }
+            """.asSmithyModel(smithyVersion = "2")
+        val warnings =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.WARNING && it.id == "CustomValidationException.ImplicitFieldNameField" }
+        warnings shouldHaveSize 1
+        warnings[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$name")
+    }
+
+    @Test
+    fun `should NOT emit WARNING when field-name member carries the explicit validationFieldName trait`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationFieldName
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                @validationFieldName
+                name: String
+            }
+            """.asSmithyModel(smithyVersion = "2")
+        val warnings =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.WARNING && it.id == "CustomValidationException.ImplicitFieldNameField" }
+        warnings shouldHaveSize 0
+    }
+
+    @Test
     fun `should still require defaults for non-canonical constrained members`() {
         val exception =
             shouldThrow<ValidatedResultException> {
