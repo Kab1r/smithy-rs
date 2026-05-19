@@ -511,4 +511,253 @@ class CustomValidationExceptionValidatorTest {
                 .filter { it.severity == Severity.WARNING && it.id == "CustomValidationException.ImplicitFieldListField" }
         warnings shouldHaveSize 0
     }
+
+    // ── New tests added by Task 15 ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `should emit ERROR when default value violates string @length constraint`() {
+        val exception =
+            shouldThrow<ValidatedResultException> {
+                """
+                namespace test
+                use smithy.framework.rust#validationException
+                use smithy.framework.rust#validationExceptionMemberDefault
+                use smithy.framework.rust#validationMessage
+
+                @validationException
+                @error("client")
+                structure ValidationError {
+                    @validationMessage
+                    message: String,
+
+                    @validationExceptionMemberDefault("ab")
+                    extraField: ConstrainedString
+                }
+
+                @length(min: 3, max: 10)
+                string ConstrainedString
+                """.asSmithyModel(smithyVersion = "2")
+            }
+
+        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+        val relevant = events.filter { it.id == "ValidationExceptionMemberDefault.LengthConstraintViolation" }
+        relevant shouldHaveSize 1
+        relevant[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$extraField")
+    }
+
+    @Test
+    fun `should emit ERROR when default value violates string @pattern constraint`() {
+        val exception =
+            shouldThrow<ValidatedResultException> {
+                """
+                namespace test
+                use smithy.framework.rust#validationException
+                use smithy.framework.rust#validationExceptionMemberDefault
+                use smithy.framework.rust#validationMessage
+
+                @validationException
+                @error("client")
+                structure ValidationError {
+                    @validationMessage
+                    message: String,
+
+                    @validationExceptionMemberDefault("123abc")
+                    extraField: LowercaseString
+                }
+
+                @pattern("^[a-z]+${'$'}")
+                string LowercaseString
+                """.asSmithyModel(smithyVersion = "2")
+            }
+
+        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+        val relevant = events.filter { it.id == "ValidationExceptionMemberDefault.PatternConstraintViolation" }
+        relevant shouldHaveSize 1
+        relevant[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$extraField")
+    }
+
+    @Test
+    fun `should emit ERROR when default value violates number @range constraint`() {
+        val exception =
+            shouldThrow<ValidatedResultException> {
+                """
+                namespace test
+                use smithy.framework.rust#validationException
+                use smithy.framework.rust#validationExceptionMemberDefault
+                use smithy.framework.rust#validationMessage
+
+                @validationException
+                @error("client")
+                structure ValidationError {
+                    @validationMessage
+                    message: String,
+
+                    @validationExceptionMemberDefault("200")
+                    extraField: BoundedInt
+                }
+
+                @range(min: 0, max: 100)
+                integer BoundedInt
+                """.asSmithyModel(smithyVersion = "2")
+            }
+
+        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+        val relevant = events.filter { it.id == "ValidationExceptionMemberDefault.RangeConstraintViolation" }
+        relevant shouldHaveSize 1
+        relevant[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$extraField")
+    }
+
+    @Test
+    fun `should accept default value satisfying string @length constraint`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationExceptionMemberDefault
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                @validationExceptionMemberDefault("abc")
+                extraField: ConstrainedString
+            }
+
+            @length(min: 3, max: 10)
+            string ConstrainedString
+            """.asSmithyModel(smithyVersion = "2")
+
+        val events =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.ERROR && it.id == "ValidationExceptionMemberDefault.LengthConstraintViolation" }
+        events shouldHaveSize 0
+    }
+
+    @Test
+    fun `should accept default value satisfying string @pattern constraint`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationExceptionMemberDefault
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                @validationExceptionMemberDefault("abc")
+                extraField: LowercaseString
+            }
+
+            @pattern("^[a-z]+${'$'}")
+            string LowercaseString
+            """.asSmithyModel(smithyVersion = "2")
+
+        val events =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.ERROR && it.id == "ValidationExceptionMemberDefault.PatternConstraintViolation" }
+        events shouldHaveSize 0
+    }
+
+    @Test
+    fun `should accept default value satisfying number @range constraint`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationExceptionMemberDefault
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                @validationExceptionMemberDefault("50")
+                extraField: BoundedInt
+            }
+
+            @range(min: 0, max: 100)
+            integer BoundedInt
+            """.asSmithyModel(smithyVersion = "2")
+
+        val events =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.ERROR && it.id == "ValidationExceptionMemberDefault.RangeConstraintViolation" }
+        events shouldHaveSize 0
+    }
+
+    @Test
+    fun `should emit ERROR when default value cannot be parsed as a number`() {
+        val exception =
+            shouldThrow<ValidatedResultException> {
+                """
+                namespace test
+                use smithy.framework.rust#validationException
+                use smithy.framework.rust#validationExceptionMemberDefault
+                use smithy.framework.rust#validationMessage
+
+                @validationException
+                @error("client")
+                structure ValidationError {
+                    @validationMessage
+                    message: String,
+
+                    @validationExceptionMemberDefault("not-a-number")
+                    extraField: BoundedInt
+                }
+
+                @range(min: 0, max: 100)
+                integer BoundedInt
+                """.asSmithyModel(smithyVersion = "2")
+            }
+
+        val events = exception.validationEvents.filter { it.severity == Severity.ERROR }
+        val relevant = events.filter { it.id == "ValidationExceptionMemberDefault.InvalidNumberValue" }
+        relevant shouldHaveSize 1
+        relevant[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$extraField")
+    }
+
+    // Note: Test #7 from the task plan (should emit WARNING when @pattern regex cannot be compiled) cannot
+    // be expressed via the normal asSmithyModel() path because smithy.api#PatternTrait eagerly compiles
+    // the pattern in its constructor and throws a SourceException for malformed patterns before the model
+    // is assembled — so an invalid pattern string never reaches our validator. The try/catch guard in the
+    // validator exists as defensive code to handle any future Smithy API changes where this might change.
+    //
+    // Instead, we verify here that when a valid pattern is used, no spurious WARNING is emitted:
+    @Test
+    fun `should NOT emit UnparseablePattern WARNING for a valid @pattern regex`() {
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationExceptionMemberDefault
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                @validationExceptionMemberDefault("abc")
+                extraField: LowercaseString
+            }
+
+            @pattern("^[a-z]+${'$'}")
+            string LowercaseString
+            """.asSmithyModel(smithyVersion = "2")
+
+        val warnings =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.id == "ValidationExceptionMemberDefault.UnparseablePattern" }
+        warnings shouldHaveSize 0
+    }
 }
