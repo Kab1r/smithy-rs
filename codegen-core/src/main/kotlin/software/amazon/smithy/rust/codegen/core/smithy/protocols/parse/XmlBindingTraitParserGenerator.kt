@@ -341,7 +341,27 @@ class XmlBindingTraitParserGenerator(
             withBlock("let $temp =", ";") {
                 parseAttributeMember(member, outerCtx)
             }
-            rust("$builder.${symbolProvider.toMemberName(member)} = $temp;")
+            // Route through the builder's setter, mirroring the data-member path. The setter knows
+            // how to lift `Inner -> MaybeConstrained<T>` when the target reaches a constrained
+            // shape (via the `From<Inner>` impls emitted by the constrained generators) and is a
+            // no-op for unconstrained scalars. The setter's signature differs between optional and
+            // required members though: optional takes `Option<impl Into<…>>` and accepts the
+            // parsed `Option<Inner>` directly, while required takes `impl Into<…>` and rejects
+            // `Option`. For the required case, only invoke the setter when the attribute is
+            // present; absent attributes leave the builder's field at `None` so `build()` can
+            // report the missing-required member like every other path.
+            val isOptional = symbolProvider.toSymbol(member).isOptional()
+            if (isOptional) {
+                rust("$builder = $builder.${member.setterName()}($temp);")
+            } else {
+                rust(
+                    """
+                    if let Some(__attrib_value) = $temp {
+                        $builder = $builder.${member.setterName()}(__attrib_value);
+                    }
+                    """,
+                )
+            }
         }
         // No need to generate a parse loop if there are no non-attribute members
         if (members.dataMembers.isEmpty()) {

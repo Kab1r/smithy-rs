@@ -119,6 +119,21 @@ class NamingObstacleCourseTest {
 
             structure NestedHolder {
                 tag: ConstrainedTag
+                // Mirrors `s3#Grantee${'$'}Type`: a required `@xmlAttribute` member targeting a
+                // constrained-reachable shape (a Smithy 2 enum). The builder's field for this
+                // member is `Option<MaybeConstrained<GranteeKind>>`, so the attribute path needs
+                // to go through the setter to lift the parsed `String` rather than being
+                // assigned directly to the field.
+                @required
+                @xmlAttribute
+                @xmlName("xsi:type")
+                kind: GranteeKind
+            }
+
+            enum GranteeKind {
+                CANONICAL_USER = "CanonicalUser"
+                CUSTOMER_BY_EMAIL = "AmazonCustomerByEmail"
+                GROUP = "Group"
             }
 
             enum ConstrainedKind {
