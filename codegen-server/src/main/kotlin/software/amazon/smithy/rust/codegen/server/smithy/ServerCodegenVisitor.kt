@@ -254,6 +254,7 @@ open class ServerCodegenVisitor(
                 ),
             ),
             validateUnsupportedConstraints(model, service, codegenContext.settings.codegenConfig),
+            validateQueryProtocolUnsupportedShapes(model, service),
             codegenDecorator.postprocessMultipleValidationExceptionsErrorMessage(
                 validateOperationsWithConstrainedInputHaveOneValidationExceptionAttached(
                     model,

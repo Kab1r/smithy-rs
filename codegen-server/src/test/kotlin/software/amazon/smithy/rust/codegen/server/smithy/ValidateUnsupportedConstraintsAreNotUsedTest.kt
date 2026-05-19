@@ -22,6 +22,11 @@ import software.amazon.smithy.rust.codegen.server.smithy.customizations.SmithyVa
 import java.io.File
 import java.util.logging.Level
 
+private fun validateQueryModel(model: Model): ValidationResult {
+    val service = model.serviceShapes.first()
+    return validateQueryProtocolUnsupportedShapes(model, service)
+}
+
 internal class ValidateUnsupportedConstraintsAreNotUsedTest {
     private val baseModel =
         """
@@ -471,6 +476,48 @@ internal class ValidateUnsupportedConstraintsAreNotUsedTest {
 
         validationResult.shouldAbort shouldBe false
         validationResult.messages shouldHaveSize 0
+    }
+
+    @Test
+    fun `it should reject sparse collections in awsQuery services`() {
+        val model =
+            """
+            namespace test
+
+            use aws.protocols#awsQuery
+            use smithy.api#xmlNamespace
+            use smithy.api#sparse
+
+            @awsQuery
+            @xmlNamespace(uri: "https://example.com/")
+            service ServiceWithSparse {
+                version: "2020-01-08",
+                operations: [Op]
+            }
+
+            operation Op {
+                input: OpInput
+                output: OpOutput
+            }
+
+            structure OpInput {
+                items: SparseList
+            }
+
+            structure OpOutput {}
+
+            @sparse
+            list SparseList {
+                member: String
+            }
+            """.asSmithyModel()
+        val validationResult = validateQueryModel(model)
+
+        validationResult.messages shouldHaveSize 1
+        validationResult.shouldAbort shouldBe true
+        validationResult.messages[0].level shouldBe Level.SEVERE
+        validationResult.messages[0].message shouldContain "sparse"
+        validationResult.messages[0].message shouldContain "test#OpInput\$items"
     }
 
     @Test

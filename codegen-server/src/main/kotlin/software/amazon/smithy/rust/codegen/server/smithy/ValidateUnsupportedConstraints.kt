@@ -5,10 +5,13 @@
 
 package software.amazon.smithy.rust.codegen.server.smithy
 
+import software.amazon.smithy.aws.traits.protocols.AwsQueryTrait
+import software.amazon.smithy.aws.traits.protocols.Ec2QueryTrait
 import software.amazon.smithy.framework.rust.ValidationExceptionTrait
 import software.amazon.smithy.model.Model
 import software.amazon.smithy.model.shapes.BlobShape
 import software.amazon.smithy.model.shapes.ByteShape
+import software.amazon.smithy.model.shapes.CollectionShape
 import software.amazon.smithy.model.shapes.EnumShape
 import software.amazon.smithy.model.shapes.IntegerShape
 import software.amazon.smithy.model.shapes.ListShape
@@ -23,6 +26,7 @@ import software.amazon.smithy.model.shapes.ShapeId
 import software.amazon.smithy.model.shapes.ShortShape
 import software.amazon.smithy.model.traits.LengthTrait
 import software.amazon.smithy.model.traits.RangeTrait
+import software.amazon.smithy.model.traits.SparseTrait
 import software.amazon.smithy.model.traits.StreamingTrait
 import software.amazon.smithy.model.traits.Trait
 import software.amazon.smithy.model.traits.UniqueItemsTrait
@@ -33,6 +37,7 @@ import software.amazon.smithy.rust.codegen.core.util.hasEventStreamMember
 import software.amazon.smithy.rust.codegen.core.util.hasTrait
 import software.amazon.smithy.rust.codegen.core.util.inputShape
 import software.amazon.smithy.rust.codegen.core.util.orNull
+import software.amazon.smithy.rust.codegen.core.util.outputShape
 import java.util.logging.Level
 import java.util.stream.Collectors
 
@@ -386,6 +391,56 @@ fun validateModelHasAtMostOneValidationException(
                 """.trimIndent(),
             ),
         )
+    }
+
+    return ValidationResult(shouldAbort = messages.any { it.level == Level.SEVERE }, messages)
+}
+
+/**
+ * Validate that awsQuery/ec2Query services do not use `@sparse` collections or maps, which are
+ * unsupported by the server query parser.
+ *
+ * Note: `document` shapes are already rejected at the Smithy model-validation layer by the
+ * built-in `UnsupportedProtocolDocument` validator for both `@awsQuery` and `@ec2Query`, so
+ * no additional check for document shapes is needed here.
+ *
+ * This check only runs when the service carries [AwsQueryTrait] or [Ec2QueryTrait].
+ */
+fun validateQueryProtocolUnsupportedShapes(
+    model: Model,
+    service: ServiceShape,
+): ValidationResult {
+    val isQueryService = service.hasTrait<AwsQueryTrait>() || service.hasTrait<Ec2QueryTrait>()
+    if (!isQueryService) {
+        return ValidationResult(shouldAbort = false, messages = emptyList())
+    }
+
+    val walker = DirectedWalker(model)
+    val messages = mutableListOf<LogMessage>()
+
+    val operations =
+        walker
+            .walkShapes(service)
+            .asSequence()
+            .filterIsInstance<OperationShape>()
+
+    for (operation in operations) {
+        val ioShapes = listOf(operation.inputShape(model), operation.outputShape(model))
+        for (ioShape in ioShapes) {
+            for (member in ioShape.members()) {
+                val target = model.expectShape(member.target)
+                // Check for @sparse collections and maps
+                if ((target is CollectionShape || target is MapShape) && target.hasTrait<SparseTrait>()) {
+                    messages +=
+                        LogMessage(
+                            Level.SEVERE,
+                            "Member `${member.id}` targets a sparse ${target.type} shape `${target.id}`, which is " +
+                                "not supported by the awsQuery/ec2Query server parser. Consider migrating the service " +
+                                "to restJson1 or restXml.",
+                        )
+                }
+            }
+        }
     }
 
     return ValidationResult(shouldAbort = messages.any { it.level == Level.SEVERE }, messages)
