@@ -63,7 +63,11 @@ impl IntoResponse<AwsQuery> for RuntimeError {
     fn into_response(self) -> http::Response<crate::body::BoxBody> {
         let name = self.name();
         let body = format!(
-            "<ErrorResponse><Error><Type>Sender</Type><Code>{}</Code><Message>{}</Message></Error><RequestId>foo-id</RequestId></ErrorResponse>",
+            // TODO(awsQuery request id): the awsQuery protocol response envelope requires a
+            // RequestId. Until the framework provides one (e.g. via a per-request extension), we
+            // emit `unknown` rather than synthesise a fake. Clients should not treat this value
+            // as meaningful.
+            "<ErrorResponse><Error><Type>Sender</Type><Code>{}</Code><Message>{}</Message></Error><RequestId>unknown</RequestId></ErrorResponse>",
             xml_escape(name),
             xml_escape(&self.message()),
         );

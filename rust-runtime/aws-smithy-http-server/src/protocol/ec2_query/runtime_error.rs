@@ -63,7 +63,8 @@ impl IntoResponse<Ec2Query> for RuntimeError {
     fn into_response(self) -> http::Response<crate::body::BoxBody> {
         let name = self.name();
         let body = format!(
-            "<Response><Errors><Error><Code>{}</Code><Message>{}</Message></Error></Errors><RequestID>foo-id</RequestID></Response>",
+            // TODO(ec2Query request id): see corresponding note in aws_query/runtime_error.rs.
+            "<Response><Errors><Error><Code>{}</Code><Message>{}</Message></Error></Errors><RequestID>unknown</RequestID></Response>",
             xml_escape(name),
             xml_escape(&self.message()),
         );
