@@ -961,6 +961,38 @@ class CustomValidationExceptionValidatorTest {
         events shouldHaveSize 0
     }
 
+    @Test
+    fun `should accept validationExceptionMemberDefault on an intEnum-targeted member`() {
+        // Mirror the other accepting tests: validation event should NOT fire for an allowed target type.
+        val model =
+            """
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationExceptionMemberDefault
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                message: String,
+
+                @validationExceptionMemberDefault("1")
+                severity: SeverityLevel
+            }
+
+            intEnum SeverityLevel {
+                LOW = 1
+                HIGH = 2
+            }
+            """.asSmithyModel(smithyVersion = "2")
+
+        val events =
+            CustomValidationExceptionValidator().validate(model)
+                .filter { it.severity == Severity.ERROR && it.id.startsWith("ValidationExceptionMemberDefault.") }
+        events shouldHaveSize 0
+    }
+
     // Note: Test #7 from the task plan (should emit WARNING when @pattern regex cannot be compiled) cannot
     // be expressed via the normal asSmithyModel() path because smithy.api#PatternTrait eagerly compiles
     // the pattern in its constructor and throws a SourceException for malformed patterns before the model
