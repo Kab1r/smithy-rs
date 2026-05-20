@@ -64,7 +64,7 @@ class ServerModuleDocProvider(private val codegenContext: ServerCodegenContext) 
             ServerRustModule.Server -> strDoc("Contains the types that are re-exported from the `aws-smithy-http-server` crate.")
             ServerRustModule.UnconstrainedModule -> strDoc("Unconstrained types for constrained shapes.")
             ServerRustModule.ConstrainedModule -> strDoc("Constrained types for constrained shapes.")
-            else -> TODO("Document this module: $module")
+            else -> null
         }
     }
 
