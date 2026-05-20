@@ -187,7 +187,8 @@ class CustomValidationExceptionValidator : AbstractValidator() {
                 if (!isCanonicalValidationExceptionMember &&
                     !this.hasTrait(ValidationExceptionMemberDefaultTrait.ID) &&
                     this.targetOrSelf(model).isDirectlyConstrainedForValidation() &&
-                    !this.hasTrait<DefaultTrait>()
+                    !this.hasTrait<DefaultTrait>() &&
+                    member.isRequired
                 ) {
                     events.add(
                         ValidationEvent.builder().id("CustomValidationException.MissingDefault")

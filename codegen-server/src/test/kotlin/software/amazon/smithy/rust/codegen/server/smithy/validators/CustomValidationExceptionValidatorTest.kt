@@ -125,6 +125,7 @@ class CustomValidationExceptionValidatorTest {
                 structure ValidationError {
                     @validationMessage
                     message: String,
+                    @required
                     constrainedField: ConstrainedString
                 }
 
@@ -427,6 +428,7 @@ class CustomValidationExceptionValidatorTest {
                 @error("client")
                 structure ValidationError {
                     message: String,
+                    @required
                     extraField: ConstrainedString
                 }
 
@@ -440,6 +442,76 @@ class CustomValidationExceptionValidatorTest {
         events shouldHaveSize 1
         events[0].id shouldBe "CustomValidationException.MissingDefault"
         events[0].shapeId.get() shouldBe ShapeId.from("test#ValidationError\$extraField")
+    }
+
+    // ── New tests added by CR-22 ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `should NOT emit MissingDefault for an optional member with a constrained target`() {
+        // Mirrors the identitystore com.amazonaws.identitystore#ValidationException case: RequestId is
+        // optional and targets a string shape with @length+@pattern. The synthetic VE constructor can
+        // emit `field: None` for such members, so the missing-default check should not fire.
+        val model = """
+            ${'$'}version: "2.0"
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                @required
+                message: String
+
+                // optional — no @required trait
+                RequestId: RequestIdShape
+            }
+
+            @length(min: 1, max: 36)
+            @pattern("^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}${'$'}")
+            string RequestIdShape
+        """.asSmithyModel(smithyVersion = "2")
+
+        val events =
+            CustomValidationExceptionValidator()
+                .validate(model)
+                .filter { it.id == "CustomValidationException.MissingDefault" }
+
+        events shouldHaveSize 0
+    }
+
+    @Test
+    fun `should emit MissingDefault for a required member with a constrained target and no default`() {
+        val model = """
+            ${'$'}version: "2.0"
+            namespace test
+            use smithy.framework.rust#validationException
+            use smithy.framework.rust#validationMessage
+
+            @validationException
+            @error("client")
+            structure ValidationError {
+                @validationMessage
+                @required
+                message: String
+
+                @required
+                RequestId: RequestIdShape
+            }
+
+            @length(min: 1, max: 36)
+            @pattern("^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}${'$'}")
+            string RequestIdShape
+        """.asSmithyModel(smithyVersion = "2", disableValidation = true)
+
+        val events =
+            CustomValidationExceptionValidator()
+                .validate(model)
+                .filter { it.id == "CustomValidationException.MissingDefault" }
+
+        events shouldHaveSize 1
+        events.first().severity shouldBe Severity.ERROR
     }
 
     // ── New tests added by Task 14 ────────────────────────────────────────────────────────────
