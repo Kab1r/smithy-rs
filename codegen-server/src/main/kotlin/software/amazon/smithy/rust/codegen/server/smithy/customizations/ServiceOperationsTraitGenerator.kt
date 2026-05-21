@@ -181,14 +181,27 @@ class ServiceOperationsTraitGenerator(
         val operationPanicMessage = "operation not implemented: $serviceName.$structName"
         val hasErrors = operation.errors.isNotEmpty()
 
+        // Use the OperationShape associated types instead of constructing
+        // `crate::{input,output,error}::<Op>{Input,Output,Error}` paths
+        // directly. Smithy-rs's casing isn't consistent across modules
+        // (e.g. Athena's `ListApplicationDPUSizes` ends up as
+        // `ListApplicationDpuSizesInput` in `input.rs` but
+        // `ListApplicationDPUSizesError` in `error.rs`). Going through the
+        // OperationShape trait lets us stay correct without mirroring those
+        // rules in this generator.
+        val opShape = "crate::operation_shape::$structName"
+        val inputTy = "<$opShape as #{SmithyHttpServer}::operation::OperationShape>::Input"
+        val outputTy = "<$opShape as #{SmithyHttpServer}::operation::OperationShape>::Output"
+        val errorTy = "<$opShape as #{SmithyHttpServer}::operation::OperationShape>::Error"
+
         if (hasErrors) {
             writer.rustTemplate(
                 """
                 fn $fieldName(
                     &self,
-                    _input: crate::input::${structName}Input,
+                    _input: $inputTy,
                 ) -> impl #{Future}<
-                    Output = #{Result}<crate::output::${structName}Output, crate::error::${structName}Error>
+                    Output = #{Result}<$outputTy, $errorTy>
                 > + #{Send} {
                     async move { panic!("$operationPanicMessage") }
                 }
@@ -200,8 +213,8 @@ class ServiceOperationsTraitGenerator(
                 """
                 fn $fieldName(
                     &self,
-                    _input: crate::input::${structName}Input,
-                ) -> impl #{Future}<Output = crate::output::${structName}Output> + #{Send} {
+                    _input: $inputTy,
+                ) -> impl #{Future}<Output = $outputTy> + #{Send} {
                     async move { panic!("$operationPanicMessage") }
                 }
                 """.trimIndent(),

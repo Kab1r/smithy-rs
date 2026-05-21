@@ -63,17 +63,14 @@ internal class ServiceOperationsTraitDecoratorTest {
         // Trait declaration uses the service shape name.
         serviceImpl shouldContain "pub trait ExampleServiceOperations"
 
-        // Fallible op: Result<Output, Error> signature with panic default.
+        // Operation methods reference Input/Output/Error via the OperationShape
+        // associated types (avoids relying on per-module casing conventions).
         serviceImpl shouldContain "fn echo("
-        serviceImpl shouldContain "crate::input::EchoInput"
-        serviceImpl shouldContain "crate::output::EchoOutput"
-        serviceImpl shouldContain "crate::error::EchoError"
+        serviceImpl shouldContain "crate::operation_shape::Echo as"
         serviceImpl shouldContain "operation not implemented: ExampleService.Echo"
 
-        // Infallible op: bare Output signature, no Error type.
         serviceImpl shouldContain "fn ping("
-        serviceImpl shouldContain "crate::input::PingInput"
-        serviceImpl shouldContain "crate::output::PingOutput"
+        serviceImpl shouldContain "crate::operation_shape::Ping as"
         serviceImpl shouldContain "operation not implemented: ExampleService.Ping"
 
         // The free into_router function: takes the impl, returns the
